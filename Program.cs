@@ -16,12 +16,9 @@ builder.Services.AddCors(options =>
 	});
 });
 
-// FastGPT HttpClient
-builder.Services.AddHttpClient<ScoringApp.Services.FastGptClient>(client =>
-{
-	var baseUrl = Environment.GetEnvironmentVariable("FASTGPT_BASE_URL") ?? "http://fastgpt:3000/";
-	client.BaseAddress = new Uri(baseUrl);
-});
+// Bind FastGPT options and HttpClient
+builder.Services.Configure<ScoringApp.Config.FastGptOptions>(builder.Configuration.GetSection("FastGpt"));
+builder.Services.AddHttpClient<ScoringApp.Services.FastGptClient>();
 
 // Notifier and Worker
 builder.Services.AddSingleton<ScoringApp.Services.ScoreNotifier>();
@@ -43,5 +40,8 @@ app.UseCors();
 app.UseAuthorization();
 
 app.MapControllers();
+
+app.UseDefaultFiles();
+app.UseStaticFiles();
 
 app.Run();

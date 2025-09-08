@@ -1,0 +1,286 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+	<meta charset="UTF-8" />
+	<meta name="viewport" content="width=device-width, initial-scale=1" />
+	<title>题库后台</title>
+	<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/antd@5/dist/reset.css" />
+	<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/antd@5/dist/antd.min.css" />
+	<style>
+		body { background:#f5f7fb; }
+		.header { background:#fff; padding:12px 20px; border-bottom:1px solid #eee; position:sticky; top:0; z-index:10; }
+		.container { max-width:1000px; margin:20px auto; padding:0 16px; }
+		.footer { text-align:center; color:#999; padding:24px 0; }
+	</style>
+</head>
+<body>
+	<div id="root"></div>
+
+	<script src="https://cdn.jsdelivr.net/npm/react@18/umd/react.production.min.js"></script>
+	<script src="https://cdn.jsdelivr.net/npm/react-dom@18/umd/react-dom.production.min.js"></script>
+	<script src="https://cdn.jsdelivr.net/npm/dayjs@1/dayjs.min.js"></script>
+	<script src="https://cdn.jsdelivr.net/npm/antd@5/dist/antd.min.js"></script>
+	<script>
+		const { useState, useEffect } = React;
+		const { Button, Card, Input, Form, message, Layout, Menu, Table, Modal, Space, Typography, Tag } = antd;
+		const { Header, Content } = Layout;
+		const { Title, Text } = Typography;
+
+		function useHashRoute() {
+			const [hash, setHash] = useState(window.location.hash || '#/login');
+			useEffect(() => {
+				const onHash = () => setHash(window.location.hash || '#/login');
+				window.addEventListener('hashchange', onHash);
+				return () => window.removeEventListener('hashchange', onHash);
+			}, []);
+			return [hash, (h) => window.location.hash = h];
+		}
+
+		function getTokenUser() {
+			try { return JSON.parse(localStorage.getItem('user') || 'null'); } catch { return null; }
+		}
+		function setTokenUser(u) { localStorage.setItem('user', JSON.stringify(u)); }
+		function clearUser() { localStorage.removeItem('user'); }
+
+		async function api(url, options={}) {
+			const res = await fetch(url, { headers: { 'Content-Type': 'application/json' }, ...options });
+			if (!res.ok) throw new Error(await res.text());
+			const ct = res.headers.get('content-type') || '';
+			if (ct.includes('application/json')) return res.json();
+			return res.text();
+		}
+
+		function App() {
+			const [hash, nav] = useHashRoute();
+			const user = getTokenUser();
+
+			useEffect(() => {
+				if (!user && !hash.startsWith('#/login')) nav('#/login');
+			}, [hash]);
+
+			return (
+				<Layout>
+					<div class="header">
+						<div style="display:flex; align-items:center; justify-content:space-between;">
+							<Space>
+								<Title level={4} style={{margin:0}}>题库后台</Title>
+								{user && <Tag color="blue">{user.username}</Tag>}
+							</Space>
+							<Space>
+								{user ? <Button onClick={()=>{clearUser(); nav('#/login');}}>退出登录</Button> : null}
+							</Space>
+						</div>
+					</div>
+					<Content>
+						<div class="container">
+							{!user ? <Login onSuccess={(u)=>{ setTokenUser(u); nav('#/questions'); }} /> : (
+								hash.startsWith('#/questions') ? <Questions user={user} /> : <Login onSuccess={(u)=>{ setTokenUser(u); nav('#/questions'); }} />
+							)}
+						</div>
+						<div class="footer">© {new Date().getFullYear()} 题库后台</div>
+					</Content>
+				</Layout>
+			);
+		}
+
+		function Login({ onSuccess }) {
+			const [isReg, setIsReg] = useState(false);
+			const [loading, setLoading] = useState(false);
+			const [form] = Form.useForm();
+
+			const submit = async () => {
+				try {
+					const v = await form.validateFields();
+					setLoading(true);
+					if (isReg) {
+						await api('/auth/register', { method:'POST', body: JSON.stringify(v) });
+						message.success('注册成功，请登录');
+						setIsReg(false);
+					} else {
+						const u = await api('/auth/login', { method:'POST', body: JSON.stringify(v) });
+						message.success('登录成功');
+						onSuccess(u);
+					}
+				} catch(e) {
+					message.error(String(e.message || e));
+				} finally {
+					setLoading(false);
+				}
+			};
+
+			return (
+				<Card style={{ maxWidth:420, margin:'40px auto' }}>
+					<Title level={4} style={{textAlign:'center'}}>{isReg ? '注册' : '登录'}</Title>
+					<Form layout="vertical" form={form}>
+						<Form.Item name="username" label="用户名" rules={[{ required:true, message:'请输入用户名'}]}>
+							<Input placeholder="用户名" />
+						</Form.Item>
+						<Form.Item name="password" label="密码" rules={[{ required:true, message:'请输入密码'}]}>
+							<Input.Password placeholder="密码" />
+						</Form.Item>
+						<Button type="primary" block loading={loading} onClick={submit}>{isReg ? '注册' : '登录'}</Button>
+					</Form>
+					<div style={{textAlign:'center', marginTop:12}}>
+						<Button type="link" onClick={()=>setIsReg(!isReg)}>{isReg ? '去登录' : '去注册'}</Button>
+					</div>
+				</Card>
+			);
+		}
+
+		function Questions({ user }) {
+			const [list, setList] = useState([]);
+			const [loading, setLoading] = useState(false);
+			const [genOpen, setGenOpen] = useState(false);
+			const [genForm] = Form.useForm();
+			const [edit, setEdit] = useState(null);
+			const [editForm] = Form.useForm();
+
+			const fetchList = async () => {
+				setLoading(true);
+				try {
+					const data = await api('/questions?userId=' + encodeURIComponent(user.id));
+					setList(data);
+				} catch(e) {
+					message.error(String(e.message || e));
+				} finally {
+					setLoading(false);
+				}
+			};
+
+			useEffect(() => { fetchList(); }, []);
+
+			const columns = [
+				{ title:'标题', dataIndex:'title', width:200, render:(v)=> v||'-' },
+				{ title:'类型', dataIndex:'type', width:120, render:(v)=> ({choice:'选择题', blank:'填空题', subjective:'主观题'}[v||'subjective']) },
+				{ title:'内容', dataIndex:'content', render:(v)=> <div style={{maxHeight:80, overflow:'auto', whiteSpace:'pre-wrap'}}>{v}</div> },
+				{ title:'创建时间', dataIndex:'createdAt', width:200, render:(v)=> new Date(v).toLocaleString() },
+				{ title:'操作', key:'actions', width:220, render:(_,r)=> <Space>
+					<Button onClick={()=>{ setEdit(r); editForm.setFieldsValue({ title:r.title, content:r.content, type:r.type||'subjective', options:r.options||[''], correctAnswers:r.correctAnswers||[], answer:r.answer||'' }); }}>编辑</Button>
+					<Button danger onClick={()=> delRow(r.id)}>删除</Button>
+				</Space>}
+			];
+
+			const gen = async () => {
+				try {
+					const v = await genForm.validateFields();
+					await api('/questions/generate', { method:'POST', body: JSON.stringify({ userId: user.id, prompt: v.prompt, title: v.title||null }) });
+					message.success('已生成');
+					setGenOpen(false);
+					genForm.resetFields();
+					fetchList();
+				} catch(e) {
+					message.error(String(e.message || e));
+				}
+			};
+
+			const saveEdit = async () => {
+				try {
+					const v = await editForm.validateFields();
+					await api('/questions/' + edit.id, { method:'PUT', body: JSON.stringify({ title: v.title||null, content: v.content }) });
+					message.success('已保存');
+					setEdit(null);
+					fetchList();
+				} catch(e) { message.error(String(e.message || e)); }
+			};
+
+			const delRow = async (id) => {
+				try {
+					await api('/questions/' + id, { method:'DELETE' });
+					message.success('已删除');
+					fetchList();
+				} catch(e) { message.error(String(e.message || e)); }
+			};
+
+			return (
+				<div>
+					<Space style={{ marginBottom:12 }}>
+						<Button type="primary" onClick={()=>setGenOpen(true)}>生成题目</Button>
+						<Button onClick={fetchList} loading={loading}>刷新</Button>
+					</Space>
+					<Table rowKey="id" loading={loading} columns={columns} dataSource={list} pagination={{ pageSize:8 }} />
+
+					<Modal title="生成题目" open={genOpen} onOk={gen} onCancel={()=>setGenOpen(false)} okText="生成">
+						<Form layout="vertical" form={genForm}>
+							<Form.Item name="title" label="标题">
+								<Input placeholder="可选" />
+							</Form.Item>
+							<Form.Item name="prompt" label="提示词" rules={[{required:true, message:'请输入提示词'}]}>
+								<Input.TextArea autoSize={{ minRows:3 }} placeholder="例如：生成一段面试题" />
+							</Form.Item>
+						</Form>
+					</Modal>
+
+					<Modal title="编辑题目" open={!!edit} onOk={saveEdit} onCancel={()=>setEdit(null)} okText="保存" width={800}>
+						<Form layout="vertical" form={editForm}>
+							<Form.Item name="title" label="标题">
+								<Input placeholder="可选" />
+							</Form.Item>
+							<Form.Item name="type" label="题型" rules={[{required:true, message:'请选择题型'}]}>
+								<antd.Select options={[
+									{label:'选择题', value:'choice'},
+									{label:'填空题', value:'blank'},
+									{label:'主观题', value:'subjective'}
+								]} />
+							</Form.Item>
+							<Form.Item name="content" label="题干" rules={[{required:true, message:'请输入题干'}]}>
+								<Input.TextArea autoSize={{ minRows:8 }} />
+							</Form.Item>
+
+							{(editForm.getFieldValue('type')||'subjective')==='choice' && (
+								<Card size="small" style={{marginBottom:12}} title="选项">
+									<Form.List name="options">
+										{(fields, { add, remove }) => (
+											<div>
+												{fields.map((field, idx) => (
+													<div style={{display:'flex', gap:8, marginBottom:8}} key={field.key}>
+														<Form.Item {...field} style={{flex:1}} rules={[{required:true, message:'请输入选项'}]}>
+															<Input placeholder={`选项 ${idx+1}`} />
+														</Form.Item>
+														<Button danger onClick={()=>remove(field.name)}>删除</Button>
+													</div>
+												))}
+												<Button onClick={()=>add('')}>新增选项</Button>
+											</div>
+										)}
+									</Form.List>
+									<Form.Item name="correctAnswers" label="正确答案（可多选）">
+										<antd.Select mode="multiple" options={(editForm.getFieldValue('options')||[]).map(o=>({label:o,value:o}))} />
+									</Form.Item>
+								</Card>
+							)}
+
+							{(editForm.getFieldValue('type')||'subjective')==='blank' && (
+								<Card size="small" style={{marginBottom:12}} title="填空答案">
+									<Form.List name="correctAnswers">
+										{(fields, { add, remove }) => (
+											<div>
+												{fields.map((field, idx) => (
+													<div style={{display:'flex', gap:8, marginBottom:8}} key={field.key}>
+														<Form.Item {...field} style={{flex:1}} rules={[{required:true, message:'请输入答案'}]}>
+															<Input placeholder={`答案 ${idx+1}`} />
+														</Form.Item>
+														<Button danger onClick={()=>remove(field.name)}>删除</Button>
+													</div>
+												))}
+												<Button onClick={()=>add('')}>新增答案</Button>
+											</div>
+										)}
+									</Form.List>
+								</Card>
+							)}
+
+							{(editForm.getFieldValue('type')||'subjective')==='subjective' && (
+								<Form.Item name="answer" label="参考答案">
+									<Input.TextArea autoSize={{ minRows:6 }} />
+								</Form.Item>
+							)}
+						</Form>
+					</Modal>
+				</div>
+			);
+		}
+
+		ReactDOM.createRoot(document.getElementById('root')).render(React.createElement(App));
+	</script>
+</body>
+</html> 
