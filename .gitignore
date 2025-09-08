@@ -1,0 +1,44 @@
+# .NET build artifacts
+bin/
+obj/
+**/bin/
+**/obj/
+
+# Visual Studio/VSCode
+.vs/
+.vscode/
+*.user
+*.suo
+*.userosscache
+*.sln.docstates
+
+# Rider/JetBrains
+.idea/
+*.iml
+
+# Logs
+*.log
+logs/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Publish outputs
+**/publish/
+/app/
+/src/.*/
+
+# Secrets and local settings
+**/appsettings.*.local.json
+secrets.json
+*.secret
+
+# Docker
+**/*.cache
+*.pid
+
+# Generated
+ScoringApp/obj/
+ScoringApp/bin/
+ScoringApp/Properties/launchSettings.json 
