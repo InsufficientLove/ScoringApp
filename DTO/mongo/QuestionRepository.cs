@@ -92,12 +92,36 @@ namespace ScoringApp.DTO.mongo
 			return rec;
 		}
 
-		public static async Task ApproveAsync(string id)
+		public static async Task<QuestionRecord> CreatePendingManualAsync(string userId, string? title, string content, string? type, string[]? options, string[]? correctAnswers, string? answer)
 		{
+			var hash = ComputeNormalizedHash(content);
+			var rec = new QuestionRecord
+			{
+				Id = Guid.NewGuid().ToString("N"),
+				UserId = userId,
+				Title = title,
+				Content = content,
+				Type = string.IsNullOrWhiteSpace(type) ? "subjective" : type,
+				Options = options,
+				CorrectAnswers = correctAnswers,
+				Answer = answer,
+				UniqueHash = hash,
+				Source = "manual",
+				Status = "pending",
+				CreatedAt = DateTime.UtcNow
+			};
+			await _col.Value.InsertOneAsync(rec);
+			return rec;
+		}
+
+		public static async Task<long> ApproveManyAsync(IEnumerable<string> ids)
+		{
+			var filter = Builders<QuestionRecord>.Filter.In(x => x.Id, ids);
 			var update = Builders<QuestionRecord>.Update
 				.Set(x => x.Status, "approved")
 				.Set(x => x.UpdatedAt, DateTime.UtcNow);
-			await _col.Value.UpdateOneAsync(x => x.Id == id, update);
+			var result = await _col.Value.UpdateManyAsync(filter, update);
+			return result.ModifiedCount;
 		}
 	}
 } 

@@ -4,6 +4,7 @@ using System.Threading.Tasks;
 using Microsoft.AspNetCore.Mvc;
 using ScoringApp.DTO.mongo;
 using ScoringApp.Services;
+using System.Linq;
 
 namespace ScoringApp.Controllers
 {
@@ -19,6 +20,8 @@ namespace ScoringApp.Controllers
 
 		public record GenerateRequest(string UserId, string Prompt, string? Title, string? Type);
 		public record UpdateRequest(string? Title, string Content, string? Type, string[]? Options, string[]? CorrectAnswers, string? Answer);
+		public record ManualCreateRequest(string UserId, string? Title, string Content, string? Type, string[]? Options, string[]? CorrectAnswers, string? Answer);
+		public record ApproveManyRequest(string[] Ids);
 
 		[HttpPost("generate")]
 		public async Task<IActionResult> Generate([FromBody] GenerateRequest req, CancellationToken ct)
@@ -31,6 +34,16 @@ namespace ScoringApp.Controllers
 				result.Content,
 				req.Type
 			);
+			return Ok(rec);
+		}
+
+		[HttpPost("manual")]
+		public async Task<IActionResult> ManualCreate([FromBody] ManualCreateRequest req)
+		{
+			if (string.IsNullOrWhiteSpace(req.UserId) || string.IsNullOrWhiteSpace(req.Content)) return BadRequest("UserId/Content required");
+			var existing = await QuestionRepository.FindByHashAsync(QuestionRepository.ComputeNormalizedHash(req.Content));
+			if (existing != null) return Conflict(new { message = "题目已存在", id = existing.Id });
+			var rec = await QuestionRepository.CreatePendingManualAsync(req.UserId, req.Title, req.Content, req.Type, req.Options, req.CorrectAnswers, req.Answer);
 			return Ok(rec);
 		}
 
@@ -58,6 +71,14 @@ namespace ScoringApp.Controllers
 			if (found == null) return NotFound();
 			await QuestionRepository.ApproveAsync(id);
 			return Ok();
+		}
+
+		[HttpPost("approve-many")]
+		public async Task<IActionResult> ApproveMany([FromBody] ApproveManyRequest req)
+		{
+			if (req?.Ids == null || req.Ids.Length == 0) return BadRequest("ids required");
+			var count = await QuestionRepository.ApproveManyAsync(req.Ids.Distinct().ToArray());
+			return Ok(new { updated = count });
 		}
 
 		[HttpDelete("{id}")]

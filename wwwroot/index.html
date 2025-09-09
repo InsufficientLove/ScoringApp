@@ -134,6 +134,9 @@
 			const [loading, setLoading] = useState(false);
 			const [genOpen, setGenOpen] = useState(false);
 			const [genForm] = Form.useForm();
+			const [manualOpen, setManualOpen] = useState(false);
+			const [manualForm] = Form.useForm();
+			const [selectedRowKeys, setSelectedRowKeys] = useState([]);
 			const [edit, setEdit] = useState(null);
 			const [editForm] = Form.useForm();
 
@@ -154,10 +157,12 @@
 			const columns = [
 				{ title:'标题', dataIndex:'title', width:200, render:(v)=> v||'-' },
 				{ title:'类型', dataIndex:'type', width:120, render:(v)=> ({choice:'选择题', blank:'填空题', subjective:'主观题'}[v||'subjective']) },
+				{ title:'状态', dataIndex:'status', width:120, render:(v)=> ({pending:'待审核', approved:'已通过', rejected:'已拒绝'}[v||'pending']) },
 				{ title:'内容', dataIndex:'content', render:(v)=> <div style={{maxHeight:80, overflow:'auto', whiteSpace:'pre-wrap'}}>{v}</div> },
 				{ title:'创建时间', dataIndex:'createdAt', width:200, render:(v)=> new Date(v).toLocaleString() },
-				{ title:'操作', key:'actions', width:220, render:(_,r)=> <Space>
+				{ title:'操作', key:'actions', width:280, render:(_,r)=> <Space>
 					<Button onClick={()=>{ setEdit(r); editForm.setFieldsValue({ title:r.title, content:r.content, type:r.type||'subjective', options:r.options||[''], correctAnswers:r.correctAnswers||[], answer:r.answer||'' }); }}>编辑</Button>
+					<Button onClick={()=> approveOne(r.id)} disabled={r.status==='approved'}>审核通过</Button>
 					<Button danger onClick={()=> delRow(r.id)}>删除</Button>
 				</Space>}
 			];
@@ -166,7 +171,7 @@
 				try {
 					const v = await genForm.validateFields();
 					await api('/questions/generate', { method:'POST', body: JSON.stringify({ userId: user.id, prompt: v.prompt, title: v.title||null }) });
-					message.success('已生成');
+					message.success('已提交AI出题，待审核');
 					setGenOpen(false);
 					genForm.resetFields();
 					fetchList();
@@ -193,15 +198,51 @@
 				} catch(e) { message.error(String(e.message || e)); }
 			};
 
+			const approveOne = async (id) => {
+				try {
+					await api('/questions/' + id + '/approve', { method:'POST' });
+					message.success('已审核通过');
+					fetchList();
+				} catch(e) { message.error(String(e.message || e)); }
+			};
+
+			const approveMany = async () => {
+				try {
+					await api('/questions/approve-many', { method:'POST', body: JSON.stringify({ ids: selectedRowKeys }) });
+					message.success('批量审核通过');
+					setSelectedRowKeys([]);
+					fetchList();
+				} catch(e) { message.error(String(e.message || e)); }
+			};
+
+			const manualSubmit = async () => {
+				try {
+					const v = await manualForm.validateFields();
+					await api('/questions/manual', { method:'POST', body: JSON.stringify({ userId: user.id, title: v.title||null, content: v.content, type: v.type||'subjective', options: v.options||null, correctAnswers: v.correctAnswers||null, answer: v.answer||null }) });
+					message.success('已提交，待审核');
+					setManualOpen(false);
+					manualForm.resetFields();
+					fetchList();
+				} catch(e) {
+					if ((e.message||'').includes('409') || (e.message||'').includes('已存在')) {
+						message.warning('题目已存在');
+					} else {
+						message.error(String(e.message || e));
+					}
+				}
+			};
+
 			return (
 				<div>
 					<Space style={{ marginBottom:12 }}>
-						<Button type="primary" onClick={()=>setGenOpen(true)}>生成题目</Button>
+						<Button type="primary" onClick={()=>setGenOpen(true)}>AI出题</Button>
+						<Button onClick={()=>setManualOpen(true)}>手工录入</Button>
+						<Button onClick={approveMany} disabled={!selectedRowKeys.length}>批量审核通过</Button>
 						<Button onClick={fetchList} loading={loading}>刷新</Button>
 					</Space>
-					<Table rowKey="id" loading={loading} columns={columns} dataSource={list} pagination={{ pageSize:8 }} />
+					<Table rowKey="id" loading={loading} columns={columns} dataSource={list} pagination={{ pageSize:8 }} rowSelection={{ selectedRowKeys, onChange:setSelectedRowKeys }} />
 
-					<Modal title="生成题目" open={genOpen} onOk={gen} onCancel={()=>setGenOpen(false)} okText="生成">
+					<Modal title="AI出题" open={genOpen} onOk={gen} onCancel={()=>setGenOpen(false)} okText="提交">
 						<Form layout="vertical" form={genForm}>
 							<Form.Item name="title" label="标题">
 								<Input placeholder="可选" />
@@ -209,6 +250,73 @@
 							<Form.Item name="prompt" label="提示词" rules={[{required:true, message:'请输入提示词'}]}>
 								<Input.TextArea autoSize={{ minRows:3 }} placeholder="例如：生成一段面试题" />
 							</Form.Item>
+						</Form>
+					</Modal>
+
+					<Modal title="手工录入" open={manualOpen} onOk={manualSubmit} onCancel={()=>setManualOpen(false)} okText="提交">
+						<Form layout="vertical" form={manualForm}>
+							<Form.Item name="title" label="标题">
+								<Input placeholder="可选" />
+							</Form.Item>
+							<Form.Item name="type" label="题型" initialValue="subjective">
+								<antd.Select options={[
+									{label:'选择题', value:'choice'},
+									{label:'填空题', value:'blank'},
+									{label:'主观题', value:'subjective'}
+								]} />
+							</Form.Item>
+							<Form.Item name="content" label="题干" rules={[{required:true, message:'请输入题干'}]}>
+								<Input.TextArea autoSize={{ minRows:6 }} />
+							</Form.Item>
+
+							{(manualForm.getFieldValue('type')||'subjective')==='choice' && (
+								<Card size="small" style={{marginBottom:12}} title="选项">
+									<Form.List name="options">
+										{(fields, { add, remove }) => (
+											<div>
+												{fields.map((field, idx) => (
+													<div style={{display:'flex', gap:8, marginBottom:8}} key={field.key}>
+														<Form.Item {...field} style={{flex:1}} rules={[{required:true, message:'请输入选项'}]}>
+															<Input placeholder={`选项 ${idx+1}`} />
+														</Form.Item>
+														<Button danger onClick={()=>remove(field.name)}>删除</Button>
+													</div>
+												))}
+												<Button onClick={()=>add('')}>新增选项</Button>
+											</div>
+										)}
+									</Form.List>
+									<Form.Item name="correctAnswers" label="正确答案（可多选）">
+										<antd.Select mode="multiple" options={(manualForm.getFieldValue('options')||[]).map(o=>({label:o,value:o}))} />
+									</Form.Item>
+								</Card>
+							)}
+
+							{(manualForm.getFieldValue('type')||'subjective')==='blank' && (
+								<Card size="small" style={{marginBottom:12}} title="填空答案">
+									<Form.List name="correctAnswers">
+										{(fields, { add, remove }) => (
+											<div>
+												{fields.map((field, idx) => (
+													<div style={{display:'flex', gap:8, marginBottom:8}} key={field.key}>
+														<Form.Item {...field} style={{flex:1}} rules={[{required:true, message:'请输入答案'}]}>
+															<Input placeholder={`答案 ${idx+1}`} />
+														</Form.Item>
+														<Button danger onClick={()=>remove(field.name)}>删除</Button>
+													</div>
+												))}
+												<Button onClick={()=>add('')}>新增答案</Button>
+											</div>
+										)}
+									</Form.List>
+								</Card>
+							)}
+
+							{(manualForm.getFieldValue('type')||'subjective')==='subjective' && (
+								<Form.Item name="answer" label="参考答案">
+									<Input.TextArea autoSize={{ minRows:6 }} />
+								</Form.Item>
+							)}
 						</Form>
 					</Modal>
 
