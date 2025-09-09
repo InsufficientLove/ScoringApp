@@ -4,6 +4,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
+using System.Diagnostics;
 using ScoringApp.DTO.mongo;
 
 namespace ScoringApp.Services
@@ -35,11 +36,17 @@ namespace ScoringApp.Services
 						continue;
 					}
 
+					_logger.LogInformation("Acquire pending: id={Id}, userId={UserId}, questionId={QuestionId}, clientAnswerId={ClientAnswerId}", rec.Id, rec.UserId, rec.QuestionId, rec.ClientAnswerId);
+
 					try
 					{
+						var sw = Stopwatch.StartNew();
 						var request = new FastGptClient.ScoreRequest(rec.UserId, rec.QuestionId, rec.Question, rec.UserAnswer, rec.ClientAnswerId);
+						_logger.LogInformation("Scoring start: userId={UserId}, clientAnswerId={ClientAnswerId}", rec.UserId, rec.ClientAnswerId);
 						var response = await _fastGptClient.ScoreAsync(request, stoppingToken);
+						sw.Stop();
 						await ScoreRepository.UpdateDoneAsync(rec.Id, response.Score, response.Feedback, stoppingToken);
+						_logger.LogInformation("Scoring done: userId={UserId}, clientAnswerId={ClientAnswerId}, score={Score}, elapsedMs={Elapsed}", rec.UserId, rec.ClientAnswerId, response.Score, sw.ElapsedMilliseconds);
 
 						var payload = JsonSerializer.Serialize(new
 						{
@@ -53,7 +60,7 @@ namespace ScoringApp.Services
 					}
 					catch (Exception ex)
 					{
-						_logger.LogError(ex, "Scoring failed for record {RecordId}", rec.Id);
+						_logger.LogError(ex, "Scoring failed: id={Id}, userId={UserId}, clientAnswerId={ClientAnswerId}", rec.Id, rec.UserId, rec.ClientAnswerId);
 						await ScoreRepository.UpdateErrorAsync(rec.Id, ex.Message, stoppingToken);
 						var payload = JsonSerializer.Serialize(new
 						{

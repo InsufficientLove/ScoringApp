@@ -37,6 +37,17 @@ if (app.Environment.IsDevelopment())
 
 app.UseCors();
 
+// Simple request logging
+app.Use(async (ctx, next) =>
+{
+	var sw = System.Diagnostics.Stopwatch.StartNew();
+	var logger = ctx.RequestServices.GetRequiredService<ILoggerFactory>().CreateLogger("Request");
+	logger.LogInformation("HTTP {Method} {Path}{Query} from {Remote}", ctx.Request.Method, ctx.Request.Path, ctx.Request.QueryString, ctx.Connection.RemoteIpAddress);
+	await next();
+	sw.Stop();
+	logger.LogInformation("HTTP {Method} {Path} -> {StatusCode} in {Elapsed}ms", ctx.Request.Method, ctx.Request.Path, ctx.Response.StatusCode, sw.ElapsedMilliseconds);
+});
+
 app.UseAuthorization();
 
 app.MapControllers();
