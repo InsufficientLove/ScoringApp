@@ -52,6 +52,18 @@ app.UseAuthorization();
 
 app.MapControllers();
 
+// No-cache index.html to prevent stale UI via proxies/browsers
+app.Use(async (ctx, next) =>
+{
+	if (ctx.Request.Path == "/" || (ctx.Request.Path.Value?.EndsWith("/index.html") ?? false))
+	{
+		ctx.Response.Headers["Cache-Control"] = "no-cache, no-store, must-revalidate";
+		ctx.Response.Headers["Pragma"] = "no-cache";
+		ctx.Response.Headers["Expires"] = "0";
+	}
+	await next();
+});
+
 app.UseDefaultFiles();
 app.UseStaticFiles();
 
