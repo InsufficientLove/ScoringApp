@@ -2,6 +2,8 @@ using MongoDB.Driver;
 using System;
 using System.Collections.Generic;
 using System.Threading.Tasks;
+using System.Security.Cryptography;
+using System.Text;
 
 namespace ScoringApp.DTO.mongo
 {
@@ -52,6 +54,50 @@ namespace ScoringApp.DTO.mongo
 		public static async Task DeleteAsync(string id)
 		{
 			await _col.Value.DeleteOneAsync(x => x.Id == id);
+		}
+
+		public static string ComputeNormalizedHash(string content)
+		{
+			if (string.IsNullOrWhiteSpace(content)) return string.Empty;
+			var normalized = content.Replace("\r", "\n").Trim();
+			var bytes = Encoding.UTF8.GetBytes(normalized);
+			var hash = SHA256.HashData(bytes);
+			return Convert.ToHexString(hash);
+		}
+
+		public static async Task<QuestionRecord?> FindByHashAsync(string hash)
+		{
+			return await _col.Value.Find(x => x.UniqueHash == hash && x.Status == "approved").FirstOrDefaultAsync();
+		}
+
+		public static async Task<QuestionRecord> CreatePendingIfNotExistsAsync(string userId, string? title, string content, string? type)
+		{
+			var hash = ComputeNormalizedHash(content);
+			var exists = await _col.Value.Find(x => x.UniqueHash == hash && x.Status == "approved").FirstOrDefaultAsync();
+			if (exists != null) return exists;
+
+			var rec = new QuestionRecord
+			{
+				Id = Guid.NewGuid().ToString("N"),
+				UserId = userId,
+				Title = title,
+				Content = content,
+				Type = string.IsNullOrWhiteSpace(type) ? "subjective" : type,
+				UniqueHash = hash,
+				Source = "fastgpt",
+				Status = "pending",
+				CreatedAt = DateTime.UtcNow
+			};
+			await _col.Value.InsertOneAsync(rec);
+			return rec;
+		}
+
+		public static async Task ApproveAsync(string id)
+		{
+			var update = Builders<QuestionRecord>.Update
+				.Set(x => x.Status, "approved")
+				.Set(x => x.UpdatedAt, DateTime.UtcNow);
+			await _col.Value.UpdateOneAsync(x => x.Id == id, update);
 		}
 	}
 } 

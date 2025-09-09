@@ -25,16 +25,12 @@ namespace ScoringApp.Controllers
 		{
 			if (string.IsNullOrWhiteSpace(req.UserId) || string.IsNullOrWhiteSpace(req.Prompt)) return BadRequest("UserId/Prompt required");
 			var result = await _client.GenerateQuestionAsync(new FastGptClient.QuestionRequest(req.Prompt), ct);
-			var rec = new QuestionRecord
-			{
-				Id = Guid.NewGuid().ToString("N"),
-				UserId = req.UserId,
-				Title = req.Title,
-				Content = result.Content,
-				Type = string.IsNullOrWhiteSpace(req.Type) ? "subjective" : req.Type,
-				CreatedAt = DateTime.UtcNow
-			};
-			await QuestionRepository.CreateAsync(rec);
+			var rec = await QuestionRepository.CreatePendingIfNotExistsAsync(
+				req.UserId,
+				req.Title,
+				result.Content,
+				req.Type
+			);
 			return Ok(rec);
 		}
 
@@ -52,6 +48,15 @@ namespace ScoringApp.Controllers
 			var found = await QuestionRepository.FindByIdAsync(id);
 			if (found == null) return NotFound();
 			await QuestionRepository.UpdateAsync(id, req.Title, req.Content, req.Type, req.Options, req.CorrectAnswers, req.Answer);
+			return Ok();
+		}
+
+		[HttpPost("{id}/approve")]
+		public async Task<IActionResult> Approve(string id)
+		{
+			var found = await QuestionRepository.FindByIdAsync(id);
+			if (found == null) return NotFound();
+			await QuestionRepository.ApproveAsync(id);
 			return Ok();
 		}
 

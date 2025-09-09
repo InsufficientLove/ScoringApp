@@ -36,6 +36,18 @@ namespace ScoringApp.DTO.mongo
 		[BsonIgnoreIfNull]
 		public string? Answer { get; set; } // for subjective reference
 
+		[BsonElement("status")]
+		[BsonDefaultValue("pending")]
+		public string Status { get; set; } = "pending"; // pending|approved|rejected
+
+		[BsonElement("uniqueHash")]
+		[BsonIgnoreIfNull]
+		public string? UniqueHash { get; set; }
+
+		[BsonElement("source")]
+		[BsonIgnoreIfNull]
+		public string? Source { get; set; } // e.g., fastgpt
+
 		[BsonElement("createdAt")]
 		public DateTime CreatedAt { get; set; }
 
