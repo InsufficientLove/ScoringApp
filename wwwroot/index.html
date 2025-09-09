@@ -4,6 +4,7 @@
 	<meta charset="UTF-8" />
 	<meta name="viewport" content="width=device-width, initial-scale=1" />
 	<title>题库后台</title>
+	<link rel="icon" href="data:," />
 	<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/antd@5/dist/reset.css" />
 	<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/antd@5/dist/antd.min.css" />
 	<style>
@@ -16,12 +17,13 @@
 <body>
 	<div id="root"></div>
 
-	<script src="https://cdn.jsdelivr.net/npm/react@18/umd/react.production.min.js"></script>
+		<script src="https://cdn.jsdelivr.net/npm/react@18/umd/react.production.min.js"></script>
 	<script src="https://cdn.jsdelivr.net/npm/react-dom@18/umd/react-dom.production.min.js"></script>
 	<script src="https://cdn.jsdelivr.net/npm/dayjs@1/dayjs.min.js"></script>
 	<script src="https://cdn.jsdelivr.net/npm/antd@5/dist/antd.min.js"></script>
-	<script>
-		const { useState, useEffect } = React;
+	<script src="https://cdn.jsdelivr.net/npm/@babel/standalone/babel.min.js"></script>
+	<script type="text/babel" data-presets="react">
+			const { useState, useEffect } = React;
 		const { Button, Card, Input, Form, message, Layout, Menu, Table, Modal, Space, Typography, Tag } = antd;
 		const { Header, Content } = Layout;
 		const { Title, Text } = Typography;
@@ -60,8 +62,8 @@
 
 			return (
 				<Layout>
-					<div class="header">
-						<div style="display:flex; align-items:center; justify-content:space-between;">
+					<div className="header">
+						<div style={{ display:'flex', alignItems:'center', justifyContent:'space-between' }}>
 							<Space>
 								<Title level={4} style={{margin:0}}>题库后台</Title>
 								{user && <Tag color="blue">{user.username}</Tag>}
@@ -72,12 +74,12 @@
 						</div>
 					</div>
 					<Content>
-						<div class="container">
+						<div className="container">
 							{!user ? <Login onSuccess={(u)=>{ setTokenUser(u); nav('#/questions'); }} /> : (
 								hash.startsWith('#/questions') ? <Questions user={user} /> : <Login onSuccess={(u)=>{ setTokenUser(u); nav('#/questions'); }} />
 							)}
 						</div>
-						<div class="footer">© {new Date().getFullYear()} 题库后台</div>
+						<div className="footer">© {new Date().getFullYear()} 题库后台</div>
 					</Content>
 				</Layout>
 			);
