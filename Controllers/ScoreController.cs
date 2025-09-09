@@ -35,8 +35,8 @@ namespace ScoringApp.Controllers
 				return;
 			}
 
-			Response.Headers.Add("Cache-Control", "no-cache");
-			Response.Headers.Add("X-Accel-Buffering", "no");
+			Response.Headers.Append("Cache-Control", "no-cache");
+			Response.Headers.Append("X-Accel-Buffering", "no");
 			Response.ContentType = "text/event-stream";
 
 			var channel = _notifier.Subscribe(userId);

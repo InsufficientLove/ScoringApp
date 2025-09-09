@@ -114,6 +114,14 @@ namespace ScoringApp.DTO.mongo
 			return rec;
 		}
 
+		public static async Task ApproveAsync(string id)
+		{
+			var update = Builders<QuestionRecord>.Update
+				.Set(x => x.Status, "approved")
+				.Set(x => x.UpdatedAt, DateTime.UtcNow);
+			await _col.Value.UpdateOneAsync(x => x.Id == id, update);
+		}
+
 		public static async Task<long> ApproveManyAsync(IEnumerable<string> ids)
 		{
 			var filter = Builders<QuestionRecord>.Filter.In(x => x.Id, ids);
