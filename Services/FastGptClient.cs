@@ -89,7 +89,8 @@ namespace ScoringApp.Services
 			sw.Stop();
 			_logger.LogInformation("FastGPT question response(v2): elapsedMs={Elapsed}, bytes={Bytes}", sw.ElapsedMilliseconds, json?.Length ?? 0);
 
-			// 兼容多种返回结构，尽力提取文本内�?			using var doc = JsonDocument.Parse(json);
+			// 兼容多种返回结构，尽力提取文本内容
+			using var doc = JsonDocument.Parse(json);
 			string? content = null;
 			var root = doc.RootElement;
 			if (root.ValueKind == JsonValueKind.Object)
