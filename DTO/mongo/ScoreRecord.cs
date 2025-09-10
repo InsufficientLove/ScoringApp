@@ -10,35 +10,44 @@ namespace ScoringApp.DTO.mongo
 		[BsonRepresentation(BsonType.String)]
 		public string Id { get; set; }
 
-		[BsonElement("userId")]
-		public string UserId { get; set; }
+		// Frontend user id
+		[BsonElement("chatId")]
+		public string ChatId { get; set; }
 
-		[BsonElement("questionId")]
-		public string QuestionId { get; set; }
+		// Question content
+		[BsonElement("content")]
+		public string Content { get; set; }
 
-		[BsonElement("question")]
-		public string Question { get; set; }
+		// choice | blank | subjective
+		[BsonElement("type")]
+		public string Type { get; set; }
 
+		// Correct answers as string (e.g., "A" or "A|B" or text)
+		[BsonElement("correctAnswers")]
+		[BsonIgnoreIfNull]
+		public string? CorrectAnswers { get; set; }
+
+		// User answer as string
 		[BsonElement("userAnswer")]
 		public string UserAnswer { get; set; }
 
-		[BsonElement("clientAnswerId")]
-		public string ClientAnswerId { get; set; }
+		// Analysis from scoring model
+		[BsonElement("analysis")]
+		[BsonIgnoreIfNull]
+		public string? Analysis { get; set; }
 
-		[BsonElement("status")]
-		public string Status { get; set; } // pending|done|error
-
+		// Score as decimal number
 		[BsonElement("score")]
 		[BsonIgnoreIfNull]
-		public int? Score { get; set; }
+		public double? Score { get; set; }
 
-		[BsonElement("feedback")]
-		[BsonIgnoreIfNull]
-		public string Feedback { get; set; }
+		// Internal processing fields
+		[BsonElement("status")]
+		public string Status { get; set; } // pending|processing|done|error
 
 		[BsonElement("error")]
 		[BsonIgnoreIfNull]
-		public string Error { get; set; }
+		public string? Error { get; set; }
 
 		[BsonElement("createdAt")]
 		public DateTime CreatedAt { get; set; }

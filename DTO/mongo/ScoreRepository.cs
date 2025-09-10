@@ -25,16 +25,16 @@ namespace ScoringApp.DTO.mongo
 			return db.GetCollection<ScoreRecord>(collection);
 		});
 
-		public static async Task EnqueuePendingAsync(string userId, string questionId, string questionText, string userAnswer, string clientAnswerId)
+		public static async Task EnqueuePendingAsync(string chatId, string content, string type, string? correctAnswers, string userAnswer)
 		{
 			var rec = new ScoreRecord
 			{
 				Id = Guid.NewGuid().ToString("N"),
-				UserId = userId,
-				QuestionId = questionId,
-				Question = questionText,
+				ChatId = chatId,
+				Content = content,
+				Type = type,
+				CorrectAnswers = correctAnswers,
 				UserAnswer = userAnswer,
-				ClientAnswerId = clientAnswerId,
 				Status = "pending",
 				CreatedAt = DateTime.UtcNow,
 				UpdatedAt = null
@@ -57,12 +57,12 @@ namespace ScoringApp.DTO.mongo
 			return await _col.Value.FindOneAndUpdateAsync(filter, update, options, ct);
 		}
 
-		public static async Task UpdateDoneAsync(string id, int score, string feedback, CancellationToken ct)
+		public static async Task UpdateDoneAsync(string id, double score, string analysis, CancellationToken ct)
 		{
 			var update = Builders<ScoreRecord>.Update
 				.Set(x => x.Status, "done")
 				.Set(x => x.Score, score)
-				.Set(x => x.Feedback, feedback)
+				.Set(x => x.Analysis, analysis)
 				.Set(x => x.Error, null)
 				.Set(x => x.UpdatedAt, DateTime.UtcNow);
 			await _col.Value.UpdateOneAsync(x => x.Id == id, update, cancellationToken: ct);
@@ -77,18 +77,18 @@ namespace ScoringApp.DTO.mongo
 			await _col.Value.UpdateOneAsync(x => x.Id == id, update, cancellationToken: ct);
 		}
 
-		public static async Task<ScoreRecord?> FindLatestDoneByUserAsync(string userId, CancellationToken ct)
+		public static async Task<ScoreRecord?> FindLatestDoneByChatAsync(string chatId, CancellationToken ct)
 		{
 			return await _col.Value
-				.Find(x => x.UserId == userId && x.Status == "done")
+				.Find(x => x.ChatId == chatId && x.Status == "done")
 				.SortByDescending(x => x.UpdatedAt)
 				.FirstOrDefaultAsync(ct);
 		}
 
-		public static async Task<ScoreRecord?> FindByClientAnswerIdAsync(string clientAnswerId, CancellationToken ct)
+		public static async Task<ScoreRecord?> FindByIdAsync(string id, CancellationToken ct)
 		{
 			return await _col.Value
-				.Find(x => x.ClientAnswerId == clientAnswerId)
+				.Find(x => x.Id == id)
 				.FirstOrDefaultAsync(ct);
 		}
 	}

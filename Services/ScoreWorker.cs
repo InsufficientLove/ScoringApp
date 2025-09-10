@@ -36,40 +36,40 @@ namespace ScoringApp.Services
 						continue;
 					}
 
-					_logger.LogInformation("Acquire pending: id={Id}, userId={UserId}, questionId={QuestionId}, clientAnswerId={ClientAnswerId}", rec.Id, rec.UserId, rec.QuestionId, rec.ClientAnswerId);
+					_logger.LogInformation("Acquire pending: id={Id}, chatId={ChatId}, type={Type}", rec.Id, rec.ChatId, rec.Type);
 
 					try
 					{
 						var sw = Stopwatch.StartNew();
-						var request = new FastGptClient.ScoreRequest(rec.UserId, rec.QuestionId, rec.Question, rec.UserAnswer, rec.ClientAnswerId);
-						_logger.LogInformation("Scoring start: userId={UserId}, clientAnswerId={ClientAnswerId}", rec.UserId, rec.ClientAnswerId);
+						var request = new FastGptClient.ScoreRequest(rec.ChatId, rec.Content, rec.CorrectAnswers, rec.UserAnswer);
+						_logger.LogInformation("Scoring start: chatId={ChatId}, id={Id}", rec.ChatId, rec.Id);
 						var response = await _fastGptClient.ScoreAsync(request, stoppingToken);
 						sw.Stop();
-						await ScoreRepository.UpdateDoneAsync(rec.Id, response.Score, response.Feedback, stoppingToken);
-						_logger.LogInformation("Scoring done: userId={UserId}, clientAnswerId={ClientAnswerId}, score={Score}, elapsedMs={Elapsed}", rec.UserId, rec.ClientAnswerId, response.Score, sw.ElapsedMilliseconds);
+						await ScoreRepository.UpdateDoneAsync(rec.Id, response.Score, response.Analysis, stoppingToken);
+						_logger.LogInformation("Scoring done: chatId={ChatId}, id={Id}, score={Score}, elapsedMs={Elapsed}", rec.ChatId, rec.Id, response.Score, sw.ElapsedMilliseconds);
 
 						var payload = JsonSerializer.Serialize(new
 						{
 							type = "done",
-							rec.ClientAnswerId,
+							id = rec.Id,
 							score = response.Score,
-							feedback = response.Feedback,
+							analysis = response.Analysis,
 							updatedAt = DateTime.UtcNow
 						});
-						await _notifier.PublishAsync(rec.UserId, payload);
+						await _notifier.PublishAsync(rec.ChatId, payload);
 					}
 					catch (Exception ex)
 					{
-						_logger.LogError(ex, "Scoring failed: id={Id}, userId={UserId}, clientAnswerId={ClientAnswerId}", rec.Id, rec.UserId, rec.ClientAnswerId);
+						_logger.LogError(ex, "Scoring failed: id={Id}, chatId={ChatId}", rec.Id, rec.ChatId);
 						await ScoreRepository.UpdateErrorAsync(rec.Id, ex.Message, stoppingToken);
 						var payload = JsonSerializer.Serialize(new
 						{
 							type = "error",
-							rec.ClientAnswerId,
+							id = rec.Id,
 							error = ex.Message,
 							updatedAt = DateTime.UtcNow
 						});
-						await _notifier.PublishAsync(rec.UserId, payload);
+						await _notifier.PublishAsync(rec.ChatId, payload);
 					}
 				}
 				catch (OperationCanceledException)

@@ -33,8 +33,8 @@ namespace ScoringApp.Services
 			_httpClient.Timeout = TimeSpan.FromMinutes(10);
 		}
 
-		public record ScoreRequest(string UserId, string QuestionId, string Question, string UserAnswer, string ClientAnswerId);
-		public record ScoreResponse(int Score, string Feedback);
+		public record ScoreRequest(string ChatId, string Content, string? CorrectAnswers, string UserAnswer);
+		public record ScoreResponse(double Score, string Analysis);
 		public record QuestionRequest(string Prompt);
 		public record QuestionResponse(string Content);
 
@@ -49,30 +49,67 @@ namespace ScoringApp.Services
 		public async Task<ScoreResponse> ScoreAsync(ScoreRequest request, CancellationToken ct)
 		{
 			var sw = Stopwatch.StartNew();
-			_logger.LogInformation("FastGPT scoring request: appId={AppId}, userId={UserId}, clientAnswerId={ClientAnswerId}", _options.ScoringApp.AppId, request.UserId, request.ClientAnswerId);
+			var baseUrl = _options.ScoringApp.BaseUrl ?? _httpClient.BaseAddress?.ToString();
+			var uri = CombineUrl(baseUrl, "v1/chat/completions");
+			_logger.LogInformation("FastGPT scoring request(v2): requestUri={Uri}, chatId={ChatId}", uri, request.ChatId);
 			var apiKey = _options.ScoringApp.ApiKey;
-			using var http = new HttpRequestMessage(HttpMethod.Post, string.Empty);
-			http.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", apiKey);
-			var scoreJson = JsonSerializer.Serialize(new
+			using var http = new HttpRequestMessage(HttpMethod.Post, uri);
+			http.Headers.Authorization = new AuthenticationHeaderValue("Bearer", apiKey);
+			http.Headers.Accept.Clear();
+			http.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
+			var payload = JsonSerializer.Serialize(new
 			{
-				appId = _options.ScoringApp.AppId,
+				stream = false,
+				detail = false,
+				chatId = request.ChatId,
+				variables = new
+				{
+					q = request.Content,
+					a = request.CorrectAnswers ?? string.Empty
+				},
 				messages = new object[]
 				{
-					new { role = "system", content = "You are a scoring assistant. Return JSON with score:int, feedback:string" },
-					new { role = "user", content = new { request.UserId, request.QuestionId, request.Question, request.UserAnswer, request.ClientAnswerId } }
+					new { content = request.UserAnswer, role = "user" }
 				}
 			});
-			http.Content = new StringContent(scoreJson, Encoding.UTF8);
-			http.Content.Headers.ContentType = new System.Net.Http.Headers.MediaTypeHeaderValue("application/json");
+			http.Content = new StringContent(payload, Encoding.UTF8);
+			http.Content.Headers.ContentType = new MediaTypeHeaderValue("application/json");
 
 			using var resp = await _httpClient.SendAsync(http, ct);
 			var json = await resp.Content.ReadAsStringAsync(ct);
-			resp.EnsureSuccessStatusCode();
+			if (!resp.IsSuccessStatusCode)
+			{
+				_logger.LogWarning("FastGPT scoring response error: status={Status}, body={Body}", (int)resp.StatusCode, json);
+				resp.EnsureSuccessStatusCode();
+			}
 			sw.Stop();
-			_logger.LogInformation("FastGPT scoring response: elapsedMs={Elapsed}, bytes={Bytes}", sw.ElapsedMilliseconds, json?.Length ?? 0);
-			var model = JsonSerializer.Deserialize<ScoreResponse>(json, new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
-			if (model == null) throw new InvalidOperationException("Invalid FastGPT response");
-			return model;
+			_logger.LogInformation("FastGPT scoring response(v2): elapsedMs={Elapsed}, bytes={Bytes}", sw.ElapsedMilliseconds, json?.Length ?? 0);
+
+			// Response may be a simple JSON with fields {analysis, score}
+			using var doc = JsonDocument.Parse(json);
+			double score = 0.0;
+			string analysis = string.Empty;
+			var root = doc.RootElement;
+			if (root.ValueKind == JsonValueKind.Object)
+			{
+				if (root.TryGetProperty("score", out var s) && (s.ValueKind == JsonValueKind.Number || s.ValueKind == JsonValueKind.String))
+				{
+					if (s.ValueKind == JsonValueKind.Number) score = s.GetDouble();
+					else if (double.TryParse(s.GetString(), out var sv)) score = sv; 
+				}
+				if (root.TryGetProperty("analysis", out var a) && a.ValueKind == JsonValueKind.String)
+				{
+					analysis = a.GetString() ?? string.Empty;
+				}
+				// Some providers nest data
+				if (score == 0 && root.TryGetProperty("data", out var data) && data.ValueKind == JsonValueKind.Object)
+				{
+					if (data.TryGetProperty("score", out var ds) && ds.ValueKind == JsonValueKind.Number) score = ds.GetDouble();
+					if (data.TryGetProperty("analysis", out var da) && da.ValueKind == JsonValueKind.String) analysis = da.GetString() ?? analysis;
+				}
+			}
+
+			return new ScoreResponse(score, analysis);
 		}
 
 		public async Task<QuestionResponse> GenerateQuestionAsync(QuestionRequest request, CancellationToken ct)
@@ -86,6 +123,8 @@ namespace ScoringApp.Services
 			_logger.LogInformation("FastGPT question request(v2): requestUri={Uri}, promptLength={Len}", uri, request.Prompt?.Length ?? 0);
 			using var http = new HttpRequestMessage(HttpMethod.Post, uri);
 			http.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", apiKey);
+			http.Headers.Accept.Clear();
+			http.Headers.Accept.Add(new System.Net.Http.Headers.MediaTypeWithQualityHeaderValue("application/json"));
 			var genJson = JsonSerializer.Serialize(new
 			{
 				stream = false,
@@ -101,8 +140,8 @@ namespace ScoringApp.Services
 
 			try
 			{
-				using var resp = await _httpClient.SendAsync(http, ct);
-				
+				using var resp = await _httpClient.SendAsync(http, System.Net.Http.HttpCompletionOption.ResponseHeadersRead, ct);
+				_logger.LogInformation("FastGPT question response headers received: status={Status}", (int)resp.StatusCode);
 				var json = await resp.Content.ReadAsStringAsync(ct);
 				_logger.LogInformation("FastGPT question response: {Response}", json);
 
