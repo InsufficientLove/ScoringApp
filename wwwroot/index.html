@@ -172,7 +172,7 @@
 											const genQuick = async () => {
 					setAiLoading(true);
 					try {
-						await api('/questions/generate', { method:'POST', body: JSON.stringify({ prompt: '给我出道题目吧', title: null }) });
+						await api('/questions/generate', { method:'POST', body: JSON.stringify({}) });
 						message.success('已提交AI获题，待审核');
 						fetchList();
 					} catch(e) {

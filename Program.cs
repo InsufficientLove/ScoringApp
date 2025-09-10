@@ -18,6 +18,7 @@ builder.Services.AddCors(options =>
 
 // Bind FastGPT options and HttpClient
 builder.Services.Configure<ScoringApp.Config.FastGptOptions>(builder.Configuration.GetSection("FastGpt"));
+builder.Services.Configure<ScoringApp.Config.FastGptCloudOptions>(builder.Configuration.GetSection("FastGptCloud"));
 builder.Services.AddHttpClient<ScoringApp.Services.FastGptClient>();
 
 // Notifier and Worker

@@ -17,18 +17,19 @@ namespace ScoringApp.Services
 	{
 		private readonly HttpClient _httpClient;
 		private readonly FastGptOptions _options;
+		private readonly FastGptCloudOptions _cloud;
 		private readonly ILogger<FastGptClient> _logger;
 
-		public FastGptClient(HttpClient httpClient, IOptions<FastGptOptions> options, ILogger<FastGptClient> logger)
+		public FastGptClient(HttpClient httpClient, IOptions<FastGptOptions> options, IOptions<FastGptCloudOptions> cloudOptions, ILogger<FastGptClient> logger)
 		{
 			_httpClient = httpClient;
 			_options = options.Value;
+			_cloud = cloudOptions.Value;
 			_logger = logger;
 			if (!string.IsNullOrWhiteSpace(_options.BaseUrl))
 			{
 				_httpClient.BaseAddress = new Uri(_options.BaseUrl);
 			}
-			// Remove default HttpClient timeout to allow long running requests
 			_httpClient.Timeout = System.Threading.Timeout.InfiniteTimeSpan;
 		}
 
@@ -36,6 +37,14 @@ namespace ScoringApp.Services
 		public record ScoreResponse(int Score, string Feedback);
 		public record QuestionRequest(string Prompt);
 		public record QuestionResponse(string Content);
+
+		private static string CombineUrl(string? baseUrl, string path)
+		{
+			if (string.IsNullOrWhiteSpace(baseUrl)) return path;
+			var trimmed = baseUrl.TrimEnd('/');
+			var norm = path.StartsWith("/") ? path : "/" + path;
+			return trimmed + norm;
+		}
 
 		public async Task<ScoreResponse> ScoreAsync(ScoreRequest request, CancellationToken ct)
 		{
@@ -54,7 +63,7 @@ namespace ScoringApp.Services
 				}
 			});
 			http.Content = new StringContent(scoreJson, Encoding.UTF8);
-			http.Content.Headers.ContentType = new MediaTypeHeaderValue("application/json");
+			http.Content.Headers.ContentType = new System.Net.Http.Headers.MediaTypeHeaderValue("application/json");
 
 			using var resp = await _httpClient.SendAsync(http, ct);
 			var json = await resp.Content.ReadAsStringAsync(ct);
@@ -69,10 +78,12 @@ namespace ScoringApp.Services
 		public async Task<QuestionResponse> GenerateQuestionAsync(QuestionRequest request, CancellationToken ct)
 		{
 			var sw = Stopwatch.StartNew();
-			var baseUrl = string.IsNullOrWhiteSpace(_options.QuestionApp.BaseUrl) ? _httpClient.BaseAddress?.ToString() : _options.QuestionApp.BaseUrl;
-			_logger.LogInformation("FastGPT question request(v2): baseUrl={BaseUrl}, promptLength={Len}", baseUrl, request.Prompt?.Length ?? 0);
-			var apiKey = _options.QuestionApp.ApiKey;
-			var uri = string.IsNullOrWhiteSpace(baseUrl) ? string.Empty : new Uri(new Uri(baseUrl), "/api/v1/chat/completions").ToString();
+			var cloudBase = _cloud?.QuestionApp?.BaseUrl;
+			var cloudKey = _cloud?.QuestionApp?.ApiKey;
+			var baseUrl = string.IsNullOrWhiteSpace(cloudBase) ? (_options.QuestionApp.BaseUrl ?? _httpClient.BaseAddress?.ToString()) : cloudBase;
+			var apiKey = string.IsNullOrWhiteSpace(cloudKey) ? _options.QuestionApp.ApiKey : cloudKey;
+			var uri = CombineUrl(baseUrl, "v1/chat/completions");
+			_logger.LogInformation("FastGPT question request(v2): requestUri={Uri}, promptLength={Len}", uri, request.Prompt?.Length ?? 0);
 			using var http = new HttpRequestMessage(HttpMethod.Post, uri);
 			http.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", apiKey);
 			var genJson = JsonSerializer.Serialize(new
@@ -86,7 +97,7 @@ namespace ScoringApp.Services
 				}
 			});
 			http.Content = new StringContent(genJson, Encoding.UTF8);
-			http.Content.Headers.ContentType = new MediaTypeHeaderValue("application/json");
+			http.Content.Headers.ContentType = new System.Net.Http.Headers.MediaTypeHeaderValue("application/json");
 
 			try
 			{
