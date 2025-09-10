@@ -28,6 +28,8 @@ namespace ScoringApp.Services
 			{
 				_httpClient.BaseAddress = new Uri(_options.BaseUrl);
 			}
+			// Remove default HttpClient timeout to allow long running requests
+			_httpClient.Timeout = System.Threading.Timeout.InfiniteTimeSpan;
 		}
 
 		public record ScoreRequest(string UserId, string QuestionId, string Question, string UserAnswer, string ClientAnswerId);
@@ -37,8 +39,6 @@ namespace ScoringApp.Services
 
 		public async Task<ScoreResponse> ScoreAsync(ScoreRequest request, CancellationToken ct)
 		{
-			using var cts = CancellationTokenSource.CreateLinkedTokenSource(ct);
-			cts.CancelAfter(TimeSpan.FromMinutes(1));
 			var sw = Stopwatch.StartNew();
 			_logger.LogInformation("FastGPT scoring request: appId={AppId}, userId={UserId}, clientAnswerId={ClientAnswerId}", _options.ScoringApp.AppId, request.UserId, request.ClientAnswerId);
 			var apiKey = _options.ScoringApp.ApiKey;
@@ -56,8 +56,8 @@ namespace ScoringApp.Services
 			http.Content = new StringContent(scoreJson, Encoding.UTF8);
 			http.Content.Headers.ContentType = new MediaTypeHeaderValue("application/json");
 
-			using var resp = await _httpClient.SendAsync(http, cts.Token);
-			var json = await resp.Content.ReadAsStringAsync(cts.Token);
+			using var resp = await _httpClient.SendAsync(http, ct);
+			var json = await resp.Content.ReadAsStringAsync(ct);
 			resp.EnsureSuccessStatusCode();
 			sw.Stop();
 			_logger.LogInformation("FastGPT scoring response: elapsedMs={Elapsed}, bytes={Bytes}", sw.ElapsedMilliseconds, json?.Length ?? 0);
@@ -68,8 +68,6 @@ namespace ScoringApp.Services
 
 		public async Task<QuestionResponse> GenerateQuestionAsync(QuestionRequest request, CancellationToken ct)
 		{
-			using var cts = CancellationTokenSource.CreateLinkedTokenSource(ct);
-			cts.CancelAfter(TimeSpan.FromMinutes(1));
 			var sw = Stopwatch.StartNew();
 			var baseUrl = string.IsNullOrWhiteSpace(_options.QuestionApp.BaseUrl) ? _httpClient.BaseAddress?.ToString() : _options.QuestionApp.BaseUrl;
 			_logger.LogInformation("FastGPT question request(v2): baseUrl={BaseUrl}, promptLength={Len}", baseUrl, request.Prompt?.Length ?? 0);
@@ -92,8 +90,8 @@ namespace ScoringApp.Services
 
 			try
 			{
-				using var resp = await _httpClient.SendAsync(http, cts.Token);
-				var json = await resp.Content.ReadAsStringAsync(cts.Token);
+				using var resp = await _httpClient.SendAsync(http, ct);
+				var json = await resp.Content.ReadAsStringAsync(ct);
 				if (!resp.IsSuccessStatusCode)
 				{
 					_logger.LogWarning("FastGPT question response error: status={Status}, body={Body}", (int)resp.StatusCode, json);
