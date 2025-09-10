@@ -75,7 +75,7 @@ namespace ScoringApp.Services
 			{
 				stream = false,
 				detail = false,
-				chatId = "11",
+				chatId = Random.Shared.Next(1, 500001).ToString(),
 				messages = new object[]
 				{
 					new { content = request.Prompt, role = "user" }
