@@ -11,7 +11,8 @@ namespace ScoringApp.DTO.mongo
 		public string Id { get; set; }
 
 		[BsonElement("userId")]
-		public string UserId { get; set; }
+		[BsonIgnoreIfNull]
+		public string? UserId { get; set; }
 
 		[BsonElement("title")]
 		[BsonIgnoreIfNull]

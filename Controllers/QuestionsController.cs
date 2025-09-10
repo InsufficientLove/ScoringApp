@@ -18,18 +18,17 @@ namespace ScoringApp.Controllers
 			_client = client;
 		}
 
-		public record GenerateRequest(string UserId, string Prompt, string? Title, string? Type);
+		public record GenerateRequest(string? Title, string? Type, string? Prompt);
 		public record UpdateRequest(string? Title, string Content, string? Type, string[]? Options, string[]? CorrectAnswers, string? Answer);
-		public record ManualCreateRequest(string UserId, string? Title, string Content, string? Type, string[]? Options, string[]? CorrectAnswers, string? Answer);
+		public record ManualCreateRequest(string? Title, string Content, string? Type, string[]? Options, string[]? CorrectAnswers, string? Answer);
 		public record ApproveManyRequest(string[] Ids);
 
 		[HttpPost("generate")]
 		public async Task<IActionResult> Generate([FromBody] GenerateRequest req, CancellationToken ct)
 		{
-			if (string.IsNullOrWhiteSpace(req.UserId) || string.IsNullOrWhiteSpace(req.Prompt)) return BadRequest("UserId/Prompt required");
-			var result = await _client.GenerateQuestionAsync(new FastGptClient.QuestionRequest(req.Prompt), ct);
+			var prompt = string.IsNullOrWhiteSpace(req.Prompt) ? "给我出道题目吧" : req.Prompt;
+			var result = await _client.GenerateQuestionAsync(new FastGptClient.QuestionRequest(prompt), ct);
 			var rec = await QuestionRepository.CreatePendingIfNotExistsAsync(
-				req.UserId,
 				req.Title,
 				result.Content,
 				req.Type
@@ -40,18 +39,17 @@ namespace ScoringApp.Controllers
 		[HttpPost("manual")]
 		public async Task<IActionResult> ManualCreate([FromBody] ManualCreateRequest req)
 		{
-			if (string.IsNullOrWhiteSpace(req.UserId) || string.IsNullOrWhiteSpace(req.Content)) return BadRequest("UserId/Content required");
+			if (string.IsNullOrWhiteSpace(req.Content)) return BadRequest("content required");
 			var existing = await QuestionRepository.FindByHashAsync(QuestionRepository.ComputeNormalizedHash(req.Content));
 			if (existing != null) return Conflict(new { message = "题目已存在", id = existing.Id });
-			var rec = await QuestionRepository.CreatePendingManualAsync(req.UserId, req.Title, req.Content, req.Type, req.Options, req.CorrectAnswers, req.Answer);
+			var rec = await QuestionRepository.CreatePendingManualAsync(req.Title, req.Content, req.Type, req.Options, req.CorrectAnswers, req.Answer);
 			return Ok(rec);
 		}
 
 		[HttpGet]
-		public async Task<IActionResult> List([FromQuery] string userId)
+		public async Task<IActionResult> List([FromQuery] string? status)
 		{
-			if (string.IsNullOrWhiteSpace(userId)) return BadRequest("userId required");
-			var list = await QuestionRepository.ListByUserAsync(userId);
+			var list = await QuestionRepository.ListAllAsync(status);
 			return Ok(list);
 		}
 

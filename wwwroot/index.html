@@ -144,7 +144,7 @@
 			const fetchList = async () => {
 				setLoading(true);
 				try {
-					const data = await api('/questions?userId=' + encodeURIComponent(user.id));
+											const data = await api('/questions');
 					setList(data);
 				} catch(e) {
 					message.error(String(e.message || e));
@@ -168,18 +168,15 @@
 				</Space>}
 			];
 
-			const gen = async () => {
-				try {
-					const v = await genForm.validateFields();
-					await api('/questions/generate', { method:'POST', body: JSON.stringify({ userId: user.id, prompt: v.prompt, title: v.title||null }) });
-					message.success('已提交AI出题，待审核');
-					setGenOpen(false);
-					genForm.resetFields();
-					fetchList();
-				} catch(e) {
-					message.error(String(e.message || e));
-				}
-			};
+							const genQuick = async () => {
+					try {
+						await api('/questions/generate', { method:'POST', body: JSON.stringify({ prompt: '给我出道题目吧', title: null }) });
+						message.success('已提交AI获题，待审核');
+						fetchList();
+					} catch(e) {
+						message.error(String(e.message || e));
+					}
+				};
 
 			const saveEdit = async () => {
 				try {
@@ -219,7 +216,7 @@
 			const manualSubmit = async () => {
 				try {
 					const v = await manualForm.validateFields();
-					await api('/questions/manual', { method:'POST', body: JSON.stringify({ userId: user.id, title: v.title||null, content: v.content, type: v.type||'subjective', options: v.options||null, correctAnswers: v.correctAnswers||null, answer: v.answer||null }) });
+											await api('/questions/manual', { method:'POST', body: JSON.stringify({ title: v.title||null, content: v.content, type: v.type||'subjective', options: v.options||null, correctAnswers: v.correctAnswers||null, answer: v.answer||null }) });
 					message.success('已提交，待审核');
 					setManualOpen(false);
 					manualForm.resetFields();
@@ -236,24 +233,14 @@
 			return (
 				<div>
 					<Space style={{ marginBottom:12 }}>
-						<Button type="primary" onClick={()=>setGenOpen(true)}>AI出题</Button>
+						<Button type="primary" onClick={genQuick}>AI获题</Button>
 						<Button onClick={()=>setManualOpen(true)}>手工录入</Button>
 						<Button onClick={approveMany} disabled={!selectedRowKeys.length}>批量审核通过</Button>
 						<Button onClick={fetchList} loading={loading}>刷新</Button>
 					</Space>
 					<Table rowKey="id" loading={loading} columns={columns} dataSource={list} pagination={{ pageSize:8 }} rowSelection={{ selectedRowKeys, onChange:setSelectedRowKeys }} />
 
-					<Modal title="AI出题" open={genOpen} onOk={gen} onCancel={()=>setGenOpen(false)} okText="提交">
-						<Form layout="vertical" form={genForm}>
-							<Form.Item name="title" label="标题">
-								<Input placeholder="可选" />
-							</Form.Item>
-							<Form.Item name="prompt" label="提示词" rules={[{required:true, message:'请输入提示词'}]}>
-								<Input.TextArea autoSize={{ minRows:3 }} placeholder="例如：生成一段面试题" />
-							</Form.Item>
-						</Form>
-					</Modal>
-
+					
 					<Modal title="手工录入" open={manualOpen} onOk={manualSubmit} onCancel={()=>setManualOpen(false)} okText="提交">
 						<Form layout="vertical" form={manualForm}>
 							<Form.Item name="title" label="标题">

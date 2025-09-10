@@ -4,6 +4,7 @@ using System.Collections.Generic;
 using System.Threading.Tasks;
 using System.Security.Cryptography;
 using System.Text;
+using System.Linq;
 
 namespace ScoringApp.DTO.mongo
 {
@@ -23,9 +24,14 @@ namespace ScoringApp.DTO.mongo
 			return db.GetCollection<QuestionRecord>("questions");
 		});
 
-		public static async Task<List<QuestionRecord>> ListByUserAsync(string userId)
+		public static async Task<List<QuestionRecord>> ListAllAsync(string? status = null)
 		{
-			return await _col.Value.Find(x => x.UserId == userId).SortByDescending(x => x.UpdatedAt).ToListAsync();
+			var filter = Builders<QuestionRecord>.Filter.Empty;
+			if (!string.IsNullOrWhiteSpace(status))
+			{
+				filter = Builders<QuestionRecord>.Filter.Eq(x => x.Status, status);
+			}
+			return await _col.Value.Find(filter).SortByDescending(x => x.UpdatedAt).ThenByDescending(x => x.CreatedAt).Limit(200).ToListAsync();
 		}
 
 		public static async Task<QuestionRecord?> FindByIdAsync(string id)
@@ -70,7 +76,7 @@ namespace ScoringApp.DTO.mongo
 			return await _col.Value.Find(x => x.UniqueHash == hash && x.Status == "approved").FirstOrDefaultAsync();
 		}
 
-		public static async Task<QuestionRecord> CreatePendingIfNotExistsAsync(string userId, string? title, string content, string? type)
+		public static async Task<QuestionRecord> CreatePendingIfNotExistsAsync(string? title, string content, string? type)
 		{
 			var hash = ComputeNormalizedHash(content);
 			var exists = await _col.Value.Find(x => x.UniqueHash == hash && x.Status == "approved").FirstOrDefaultAsync();
@@ -79,7 +85,7 @@ namespace ScoringApp.DTO.mongo
 			var rec = new QuestionRecord
 			{
 				Id = Guid.NewGuid().ToString("N"),
-				UserId = userId,
+				UserId = null,
 				Title = title,
 				Content = content,
 				Type = string.IsNullOrWhiteSpace(type) ? "subjective" : type,
@@ -92,13 +98,13 @@ namespace ScoringApp.DTO.mongo
 			return rec;
 		}
 
-		public static async Task<QuestionRecord> CreatePendingManualAsync(string userId, string? title, string content, string? type, string[]? options, string[]? correctAnswers, string? answer)
+		public static async Task<QuestionRecord> CreatePendingManualAsync(string? title, string content, string? type, string[]? options, string[]? correctAnswers, string? answer)
 		{
 			var hash = ComputeNormalizedHash(content);
 			var rec = new QuestionRecord
 			{
 				Id = Guid.NewGuid().ToString("N"),
-				UserId = userId,
+				UserId = null,
 				Title = title,
 				Content = content,
 				Type = string.IsNullOrWhiteSpace(type) ? "subjective" : type,
