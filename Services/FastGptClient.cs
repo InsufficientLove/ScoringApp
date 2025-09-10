@@ -71,9 +71,11 @@ namespace ScoringApp.Services
 			using var cts = CancellationTokenSource.CreateLinkedTokenSource(ct);
 			cts.CancelAfter(TimeSpan.FromMinutes(1));
 			var sw = Stopwatch.StartNew();
-			_logger.LogInformation("FastGPT question request(v2): chatCompletions, promptLength={Len}", request.Prompt?.Length ?? 0);
+			var baseUrl = string.IsNullOrWhiteSpace(_options.QuestionApp.BaseUrl) ? _httpClient.BaseAddress?.ToString() : _options.QuestionApp.BaseUrl;
+			_logger.LogInformation("FastGPT question request(v2): baseUrl={BaseUrl}, promptLength={Len}", baseUrl, request.Prompt?.Length ?? 0);
 			var apiKey = _options.QuestionApp.ApiKey;
-			using var http = new HttpRequestMessage(HttpMethod.Post, string.Empty);
+			var uri = string.IsNullOrWhiteSpace(baseUrl) ? string.Empty : new Uri(new Uri(baseUrl), "/api/v1/chat/completions").ToString();
+			using var http = new HttpRequestMessage(HttpMethod.Post, uri);
 			http.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", apiKey);
 			var genJson = JsonSerializer.Serialize(new
 			{
@@ -103,7 +105,6 @@ namespace ScoringApp.Services
 				var snippet = snippetLen > 0 ? json!.Substring(0, snippetLen) : string.Empty;
 				_logger.LogInformation("FastGPT question raw response snippet({Len}): {Snippet}", snippetLen, snippet);
 
-				// 兼容多种返回结构，尽力提取文本内容
 				using var doc = JsonDocument.Parse(json);
 				string? content = null;
 				var root = doc.RootElement;
@@ -123,13 +124,13 @@ namespace ScoringApp.Services
 							content = c3.GetString();
 					}
 				}
-				content ??= json; // 兜底返回原文
+				content ??= json;
 
 				return new QuestionResponse(content);
 			}
 			catch (HttpRequestException ex)
 			{
-				_logger.LogError(ex, "FastGPT question network error: baseUrl={BaseUrl}", _httpClient.BaseAddress);
+				_logger.LogError(ex, "FastGPT question network error: requestUri={RequestUri}", uri);
 				throw;
 			}
 		}
