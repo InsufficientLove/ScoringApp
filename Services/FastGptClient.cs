@@ -30,7 +30,7 @@ namespace ScoringApp.Services
 			{
 				_httpClient.BaseAddress = new Uri(_options.BaseUrl);
 			}
-			_httpClient.Timeout = System.Threading.Timeout.InfiniteTimeSpan;
+			_httpClient.Timeout = TimeSpan.FromMinutes(10);
 		}
 
 		public record ScoreRequest(string UserId, string QuestionId, string Question, string UserAnswer, string ClientAnswerId);
@@ -102,7 +102,10 @@ namespace ScoringApp.Services
 			try
 			{
 				using var resp = await _httpClient.SendAsync(http, ct);
+				
 				var json = await resp.Content.ReadAsStringAsync(ct);
+				_logger.LogInformation("FastGPT question response: {Response}", json);
+
 				if (!resp.IsSuccessStatusCode)
 				{
 					_logger.LogWarning("FastGPT question response error: status={Status}, body={Body}", (int)resp.StatusCode, json);

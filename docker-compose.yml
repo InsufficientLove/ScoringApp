@@ -14,6 +14,8 @@ services:
       MONGO_USER: "mongo"
       MONGO_PASSWORD: "mongo"
       MONGO_COLLECTION: "scores"
+    volumes:
+      - ./log:/app/log
     restart: unless-stopped
     # networks:
     #   - scoring-net
