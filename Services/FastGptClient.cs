@@ -37,6 +37,8 @@ namespace ScoringApp.Services
 
 		public async Task<ScoreResponse> ScoreAsync(ScoreRequest request, CancellationToken ct)
 		{
+			using var cts = CancellationTokenSource.CreateLinkedTokenSource(ct);
+			cts.CancelAfter(TimeSpan.FromMinutes(1));
 			var sw = Stopwatch.StartNew();
 			_logger.LogInformation("FastGPT scoring request: appId={AppId}, userId={UserId}, clientAnswerId={ClientAnswerId}", _options.ScoringApp.AppId, request.UserId, request.ClientAnswerId);
 			var apiKey = _options.ScoringApp.ApiKey;
@@ -54,8 +56,8 @@ namespace ScoringApp.Services
 			http.Content = new StringContent(scoreJson, Encoding.UTF8);
 			http.Content.Headers.ContentType = new MediaTypeHeaderValue("application/json");
 
-			using var resp = await _httpClient.SendAsync(http, ct);
-			var json = await resp.Content.ReadAsStringAsync(ct);
+			using var resp = await _httpClient.SendAsync(http, cts.Token);
+			var json = await resp.Content.ReadAsStringAsync(cts.Token);
 			resp.EnsureSuccessStatusCode();
 			sw.Stop();
 			_logger.LogInformation("FastGPT scoring response: elapsedMs={Elapsed}, bytes={Bytes}", sw.ElapsedMilliseconds, json?.Length ?? 0);
@@ -66,6 +68,8 @@ namespace ScoringApp.Services
 
 		public async Task<QuestionResponse> GenerateQuestionAsync(QuestionRequest request, CancellationToken ct)
 		{
+			using var cts = CancellationTokenSource.CreateLinkedTokenSource(ct);
+			cts.CancelAfter(TimeSpan.FromMinutes(1));
 			var sw = Stopwatch.StartNew();
 			_logger.LogInformation("FastGPT question request(v2): chatCompletions, promptLength={Len}", request.Prompt?.Length ?? 0);
 			var apiKey = _options.QuestionApp.ApiKey;
@@ -84,8 +88,8 @@ namespace ScoringApp.Services
 			http.Content = new StringContent(genJson, Encoding.UTF8);
 			http.Content.Headers.ContentType = new MediaTypeHeaderValue("application/json");
 
-			using var resp = await _httpClient.SendAsync(http, ct);
-			var json = await resp.Content.ReadAsStringAsync(ct);
+			using var resp = await _httpClient.SendAsync(http, cts.Token);
+			var json = await resp.Content.ReadAsStringAsync(cts.Token);
 			if (!resp.IsSuccessStatusCode)
 			{
 				_logger.LogWarning("FastGPT question response error: status={Status}, body={Body}", (int)resp.StatusCode, json);

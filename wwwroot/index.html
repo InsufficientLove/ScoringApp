@@ -131,8 +131,9 @@
 		}
 
 		function Questions({ user }) {
-			const [list, setList] = useState([]);
-			const [loading, setLoading] = useState(false);
+							const [list, setList] = useState([]);
+				const [loading, setLoading] = useState(false);
+				const [aiLoading, setAiLoading] = useState(false);
 			const [genOpen, setGenOpen] = useState(false);
 			const [genForm] = Form.useForm();
 			const [manualOpen, setManualOpen] = useState(false);
@@ -168,15 +169,18 @@
 				</Space>}
 			];
 
-							const genQuick = async () => {
-				try {
+											const genQuick = async () => {
+					setAiLoading(true);
+					try {
 						await api('/questions/generate', { method:'POST', body: JSON.stringify({ prompt: '给我出道题目吧', title: null }) });
 						message.success('已提交AI获题，待审核');
-					fetchList();
-				} catch(e) {
-					message.error(String(e.message || e));
-				}
-			};
+						fetchList();
+					} catch(e) {
+						message.error(String(e.message || e));
+					} finally {
+						setAiLoading(false);
+					}
+				};
 
 			const saveEdit = async () => {
 				try {
@@ -233,7 +237,7 @@
 			return (
 				<div>
 					<Space style={{ marginBottom:12 }}>
-						<Button type="primary" onClick={genQuick}>AI获题</Button>
+						<Button type="primary" onClick={genQuick} loading={aiLoading}>AI获题</Button>
 						<Button onClick={()=>setManualOpen(true)}>手工录入</Button>
 						<Button onClick={approveMany} disabled={!selectedRowKeys.length}>批量审核通过</Button>
 						<Button onClick={fetchList} loading={loading}>刷新</Button>

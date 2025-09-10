@@ -26,7 +26,7 @@ namespace ScoringApp.Controllers
 		[HttpPost("generate")]
 		public async Task<IActionResult> Generate([FromBody] GenerateRequest req, CancellationToken ct)
 		{
-			var prompt = string.IsNullOrWhiteSpace(req.Prompt) ? "给我出道题目吧" : req.Prompt;
+			var prompt = string.IsNullOrWhiteSpace(req.Prompt) ? "题库拉取" : req.Prompt;
 			var result = await _client.GenerateQuestionAsync(new FastGptClient.QuestionRequest(prompt), ct);
 			var rec = await QuestionRepository.CreatePendingIfNotExistsAsync(
 				req.Title,
