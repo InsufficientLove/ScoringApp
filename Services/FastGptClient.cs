@@ -9,6 +9,7 @@ using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using ScoringApp.Config;
 using System.Diagnostics;
+using System.Net.Http.Headers;
 
 namespace ScoringApp.Services
 {
@@ -41,7 +42,7 @@ namespace ScoringApp.Services
 			var apiKey = _options.ScoringApp.ApiKey;
 			using var http = new HttpRequestMessage(HttpMethod.Post, string.Empty);
 			http.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", apiKey);
-			http.Content = new StringContent(JsonSerializer.Serialize(new
+			var scoreJson = JsonSerializer.Serialize(new
 			{
 				appId = _options.ScoringApp.AppId,
 				messages = new object[]
@@ -49,7 +50,9 @@ namespace ScoringApp.Services
 					new { role = "system", content = "You are a scoring assistant. Return JSON with score:int, feedback:string" },
 					new { role = "user", content = new { request.UserId, request.QuestionId, request.Question, request.UserAnswer, request.ClientAnswerId } }
 				}
-			}), Encoding.UTF8, "application/json");
+			});
+			http.Content = new StringContent(scoreJson, Encoding.UTF8);
+			http.Content.Headers.ContentType = new MediaTypeHeaderValue("application/json");
 
 			using var resp = await _httpClient.SendAsync(http, ct);
 			var json = await resp.Content.ReadAsStringAsync(ct);
@@ -68,7 +71,7 @@ namespace ScoringApp.Services
 			var apiKey = _options.QuestionApp.ApiKey;
 			using var http = new HttpRequestMessage(HttpMethod.Post, string.Empty);
 			http.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", apiKey);
-			http.Content = new StringContent(JsonSerializer.Serialize(new
+			var genJson = JsonSerializer.Serialize(new
 			{
 				stream = false,
 				detail = false,
@@ -77,7 +80,9 @@ namespace ScoringApp.Services
 				{
 					new { content = request.Prompt, role = "user" }
 				}
-			}), Encoding.UTF8, "application/json");
+			});
+			http.Content = new StringContent(genJson, Encoding.UTF8);
+			http.Content.Headers.ContentType = new MediaTypeHeaderValue("application/json");
 
 			using var resp = await _httpClient.SendAsync(http, ct);
 			var json = await resp.Content.ReadAsStringAsync(ct);
