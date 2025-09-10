@@ -106,7 +106,7 @@ namespace ScoringApp.Services
 				if (!resp.IsSuccessStatusCode)
 				{
 					_logger.LogWarning("FastGPT question response error: status={Status}, body={Body}", (int)resp.StatusCode, json);
-					resp.EnsureSuccessStatusCode();
+					throw new HttpRequestException($"FastGPT error {(int)resp.StatusCode}: {json}", null, resp.StatusCode);
 				}
 				sw.Stop();
 				_logger.LogInformation("FastGPT question response(v2): elapsedMs={Elapsed}, bytes={Bytes}", sw.ElapsedMilliseconds, json?.Length ?? 0);

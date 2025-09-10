@@ -27,13 +27,59 @@ namespace ScoringApp.Controllers
 		public async Task<IActionResult> Generate([FromBody] GenerateRequest req, CancellationToken ct)
 		{
 			var prompt = string.IsNullOrWhiteSpace(req.Prompt) ? "题库拉取" : req.Prompt;
-			var result = await _client.GenerateQuestionAsync(new FastGptClient.QuestionRequest(prompt), ct);
-			var rec = await QuestionRepository.CreatePendingIfNotExistsAsync(
-				req.Title,
-				result.Content,
-				req.Type
-			);
-			return Ok(rec);
+			try
+			{
+				var result = await _client.GenerateQuestionAsync(new FastGptClient.QuestionRequest(prompt), ct);
+				var created = 0;
+				try
+				{
+					using var doc = System.Text.Json.JsonDocument.Parse(result.Content);
+					var root = doc.RootElement;
+					if (root.TryGetProperty("select", out var selects) && selects.ValueKind == System.Text.Json.JsonValueKind.Array)
+					{
+						foreach (var item in selects.EnumerateArray())
+						{
+							var content = item.GetProperty("content").GetString();
+							var opts = item.GetProperty("options");
+							var correct = item.GetProperty("correct_answer").GetString();
+							var options = opts.EnumerateObject().Select(p => $"{p.Name}:{p.Value.GetString()}").ToArray();
+							var rec = await QuestionRepository.CreatePendingFastGptIfNotExistsAsync(null, content!, "choice", options, new[] { correct! }, null);
+							created++;
+						}
+					}
+					if (root.TryGetProperty("fill", out var fills) && fills.ValueKind == System.Text.Json.JsonValueKind.Array)
+					{
+						foreach (var item in fills.EnumerateArray())
+						{
+							var content = item.GetProperty("content").GetString();
+							var correct = item.GetProperty("correct_answer").GetString();
+							var rec = await QuestionRepository.CreatePendingFastGptIfNotExistsAsync(null, content!, "blank", null, new[] { correct! }, null);
+							created++;
+						}
+					}
+					if (root.TryGetProperty("sort_question", out var sorts) && sorts.ValueKind == System.Text.Json.JsonValueKind.Array)
+					{
+						foreach (var item in sorts.EnumerateArray())
+						{
+							var content = item.GetProperty("content").GetString();
+							var point = item.TryGetProperty("point", out var p) ? p.GetString() : null;
+							var rec = await QuestionRepository.CreatePendingFastGptIfNotExistsAsync(null, content!, "subjective", null, null, point);
+							created++;
+						}
+					}
+				}
+				catch
+				{
+					// 如果不是结构化JSON，作为一条主观题
+					var rec = await QuestionRepository.CreatePendingIfNotExistsAsync(null, result.Content, "subjective");
+					created++;
+				}
+				return Ok(new { created });
+			}
+			catch (HttpRequestException ex)
+			{
+				return StatusCode(502, new { message = "FastGPT upstream error", detail = ex.Message });
+			}
 		}
 
 		[HttpPost("manual")]

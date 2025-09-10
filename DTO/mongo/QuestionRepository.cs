@@ -5,6 +5,7 @@ using System.Threading.Tasks;
 using System.Security.Cryptography;
 using System.Text;
 using System.Linq;
+using System.Text.Json;
 
 namespace ScoringApp.DTO.mongo
 {
@@ -71,6 +72,21 @@ namespace ScoringApp.DTO.mongo
 			return Convert.ToHexString(hash);
 		}
 
+		static string ComputeCompositeHash(string? title, string content, string? type, string[]? options, string[]? correctAnswers, string? answer)
+		{
+			var obj = new
+			{
+				title = title ?? string.Empty,
+				content = (content ?? string.Empty).Replace("\r", "\n").Trim(),
+				type = type ?? string.Empty,
+				options = options ?? Array.Empty<string>(),
+				correctAnswers = correctAnswers ?? Array.Empty<string>(),
+				answer = answer ?? string.Empty
+			};
+			var json = JsonSerializer.Serialize(obj);
+			return ComputeNormalizedHash(json);
+		}
+
 		public static async Task<QuestionRecord?> FindByHashAsync(string hash)
 		{
 			return await _col.Value.Find(x => x.UniqueHash == hash && x.Status == "approved").FirstOrDefaultAsync();
@@ -113,6 +129,31 @@ namespace ScoringApp.DTO.mongo
 				Answer = answer,
 				UniqueHash = hash,
 				Source = "manual",
+				Status = "pending",
+				CreatedAt = DateTime.UtcNow
+			};
+			await _col.Value.InsertOneAsync(rec);
+			return rec;
+		}
+
+		public static async Task<QuestionRecord> CreatePendingFastGptIfNotExistsAsync(string? title, string content, string? type, string[]? options, string[]? correctAnswers, string? answer)
+		{
+			var hash = ComputeCompositeHash(title, content, type, options, correctAnswers, answer);
+			var exists = await _col.Value.Find(x => x.UniqueHash == hash && x.Status == "approved").FirstOrDefaultAsync();
+			if (exists != null) return exists;
+
+			var rec = new QuestionRecord
+			{
+				Id = Guid.NewGuid().ToString("N"),
+				UserId = null,
+				Title = title,
+				Content = content,
+				Type = string.IsNullOrWhiteSpace(type) ? "subjective" : type,
+				Options = options,
+				CorrectAnswers = correctAnswers,
+				Answer = answer,
+				UniqueHash = hash,
+				Source = "fastgpt",
 				Status = "pending",
 				CreatedAt = DateTime.UtcNow
 			};
