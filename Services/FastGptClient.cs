@@ -88,39 +88,50 @@ namespace ScoringApp.Services
 			http.Content = new StringContent(genJson, Encoding.UTF8);
 			http.Content.Headers.ContentType = new MediaTypeHeaderValue("application/json");
 
-			using var resp = await _httpClient.SendAsync(http, cts.Token);
-			var json = await resp.Content.ReadAsStringAsync(cts.Token);
-			if (!resp.IsSuccessStatusCode)
+			try
 			{
-				_logger.LogWarning("FastGPT question response error: status={Status}, body={Body}", (int)resp.StatusCode, json);
-				resp.EnsureSuccessStatusCode();
-			}
-			sw.Stop();
-			_logger.LogInformation("FastGPT question response(v2): elapsedMs={Elapsed}, bytes={Bytes}", sw.ElapsedMilliseconds, json?.Length ?? 0);
+				using var resp = await _httpClient.SendAsync(http, cts.Token);
+				var json = await resp.Content.ReadAsStringAsync(cts.Token);
+				if (!resp.IsSuccessStatusCode)
+				{
+					_logger.LogWarning("FastGPT question response error: status={Status}, body={Body}", (int)resp.StatusCode, json);
+					resp.EnsureSuccessStatusCode();
+				}
+				sw.Stop();
+				_logger.LogInformation("FastGPT question response(v2): elapsedMs={Elapsed}, bytes={Bytes}", sw.ElapsedMilliseconds, json?.Length ?? 0);
+				var snippetLen = Math.Min(json?.Length ?? 0, 1500);
+				var snippet = snippetLen > 0 ? json!.Substring(0, snippetLen) : string.Empty;
+				_logger.LogInformation("FastGPT question raw response snippet({Len}): {Snippet}", snippetLen, snippet);
 
-			// 兼容多种返回结构，尽力提取文本内容
-			using var doc = JsonDocument.Parse(json);
-			string? content = null;
-			var root = doc.RootElement;
-			if (root.ValueKind == JsonValueKind.Object)
+				// 兼容多种返回结构，尽力提取文本内容
+				using var doc = JsonDocument.Parse(json);
+				string? content = null;
+				var root = doc.RootElement;
+				if (root.ValueKind == JsonValueKind.Object)
+				{
+					if (root.TryGetProperty("content", out var c1) && c1.ValueKind == JsonValueKind.String)
+						content = c1.GetString();
+					else if (root.TryGetProperty("data", out var data))
+					{
+						if (data.ValueKind == JsonValueKind.Object && data.TryGetProperty("content", out var c2) && c2.ValueKind == JsonValueKind.String)
+							content = c2.GetString();
+					}
+					else if (root.TryGetProperty("choices", out var choices) && choices.ValueKind == JsonValueKind.Array && choices.GetArrayLength() > 0)
+					{
+						var first = choices[0];
+						if (first.ValueKind == JsonValueKind.Object && first.TryGetProperty("message", out var msg) && msg.ValueKind == JsonValueKind.Object && msg.TryGetProperty("content", out var c3) && c3.ValueKind == JsonValueKind.String)
+							content = c3.GetString();
+					}
+				}
+				content ??= json; // 兜底返回原文
+
+				return new QuestionResponse(content);
+			}
+			catch (HttpRequestException ex)
 			{
-				if (root.TryGetProperty("content", out var c1) && c1.ValueKind == JsonValueKind.String)
-					content = c1.GetString();
-				else if (root.TryGetProperty("data", out var data))
-				{
-					if (data.ValueKind == JsonValueKind.Object && data.TryGetProperty("content", out var c2) && c2.ValueKind == JsonValueKind.String)
-						content = c2.GetString();
-				}
-				else if (root.TryGetProperty("choices", out var choices) && choices.ValueKind == JsonValueKind.Array && choices.GetArrayLength() > 0)
-				{
-					var first = choices[0];
-					if (first.ValueKind == JsonValueKind.Object && first.TryGetProperty("message", out var msg) && msg.ValueKind == JsonValueKind.Object && msg.TryGetProperty("content", out var c3) && c3.ValueKind == JsonValueKind.String)
-						content = c3.GetString();
-				}
+				_logger.LogError(ex, "FastGPT question network error: baseUrl={BaseUrl}", _httpClient.BaseAddress);
+				throw;
 			}
-			content ??= json; // 兜底返回原文
-
-			return new QuestionResponse(content);
 		}
 	}
 } 
