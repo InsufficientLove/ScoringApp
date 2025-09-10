@@ -49,7 +49,12 @@ namespace ScoringApp.Services
 		public async Task<ScoreResponse> ScoreAsync(ScoreRequest request, CancellationToken ct)
 		{
 			var sw = Stopwatch.StartNew();
-			var baseUrl = _options.ScoringApp.BaseUrl ?? _httpClient.BaseAddress?.ToString();
+			var baseUrl = _options.ScoringApp.BaseUrl;
+			if (string.IsNullOrWhiteSpace(baseUrl))
+			{
+				_logger.LogError("FastGPT scoring BaseUrl not configured. Set FastGpt:ScoringApp:BaseUrl.");
+				throw new InvalidOperationException("FastGPT scoring BaseUrl not configured");
+			}
 			var uri = CombineUrl(baseUrl, "v1/chat/completions");
 			_logger.LogInformation("FastGPT scoring request(v2): requestUri={Uri}, chatId={ChatId}", uri, request.ChatId);
 			var apiKey = _options.ScoringApp.ApiKey;
@@ -117,7 +122,12 @@ namespace ScoringApp.Services
 			var sw = Stopwatch.StartNew();
 			var cloudBase = _cloud?.QuestionApp?.BaseUrl;
 			var cloudKey = _cloud?.QuestionApp?.ApiKey;
-			var baseUrl = string.IsNullOrWhiteSpace(cloudBase) ? (_options.QuestionApp.BaseUrl ?? _httpClient.BaseAddress?.ToString()) : cloudBase;
+			var baseUrl = string.IsNullOrWhiteSpace(cloudBase) ? _options.QuestionApp.BaseUrl : cloudBase;
+			if (string.IsNullOrWhiteSpace(baseUrl))
+			{
+				_logger.LogError("FastGPT question BaseUrl not configured. Set FastGptCloud:QuestionApp:BaseUrl or FastGpt:QuestionApp:BaseUrl.");
+				throw new InvalidOperationException("FastGPT question BaseUrl not configured");
+			}
 			var apiKey = string.IsNullOrWhiteSpace(cloudKey) ? _options.QuestionApp.ApiKey : cloudKey;
 			var uri = CombineUrl(baseUrl, "v1/chat/completions");
 			_logger.LogInformation("FastGPT question request(v2): requestUri={Uri}, promptLength={Len}", uri, request.Prompt?.Length ?? 0);

@@ -41,8 +41,19 @@ namespace ScoringApp.Services
 				var count = 0;
 				foreach (var ch in bag)
 				{
-					await ch.Writer.WriteAsync(message);
-					count++;
+					try
+					{
+						// Prefer TryWrite to avoid blocking and exceptions on closed channels
+						if (!ch.Writer.TryWrite(message))
+						{
+							await ch.Writer.WriteAsync(message);
+						}
+						count++;
+					}
+					catch (System.Threading.Channels.ChannelClosedException)
+					{
+						// Ignore closed channel
+					}
 				}
 				_logger.LogInformation("SSE published: userId={UserId}, subscribers={SubscriberCount}, messageLength={MessageLength}", userId, count, message?.Length ?? 0);
 			}
