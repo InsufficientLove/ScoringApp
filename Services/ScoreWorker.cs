@@ -50,8 +50,12 @@ namespace ScoringApp.Services
 
 						var payload = JsonSerializer.Serialize(new
 						{
-							type = "done",
 							id = rec.Id,
+							chatId = rec.ChatId,
+							content = rec.Content,
+							type = rec.Type,
+							correctAnsewers = rec.CorrectAnswers,
+							userAnswer = rec.UserAnswer,
 							score = response.Score,
 							analysis = response.Analysis,
 							updatedAt = DateTime.UtcNow
