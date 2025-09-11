@@ -93,31 +93,72 @@ namespace ScoringApp.Services
 			sw.Stop();
 			_logger.LogInformation("FastGPT scoring response(v2,{Source}): elapsedMs={Elapsed}, bytes={Bytes}", source, sw.ElapsedMilliseconds, json?.Length ?? 0);
 
-			// Response may be a simple JSON with fields {analysis, score}
-			using var doc = JsonDocument.Parse(json);
-			double score = 0.0;
-			string analysis = string.Empty;
-			var root = doc.RootElement;
-			if (root.ValueKind == JsonValueKind.Object)
+			// Robust parsing: try root {score, analysis}, then data, then JSON strings in content fields
+			double? parsedScore = null;
+			string? parsedAnalysis = null;
+
+			void TryExtractFrom(JsonElement element)
 			{
-				if (root.TryGetProperty("score", out var s) && (s.ValueKind == JsonValueKind.Number || s.ValueKind == JsonValueKind.String))
+				if (element.ValueKind != JsonValueKind.Object) return;
+				if (element.TryGetProperty("score", out var s))
 				{
-					if (s.ValueKind == JsonValueKind.Number) score = s.GetDouble();
-					else if (double.TryParse(s.GetString(), out var sv)) score = sv; 
+					if (s.ValueKind == JsonValueKind.Number) parsedScore = s.GetDouble();
+					else if (s.ValueKind == JsonValueKind.String && double.TryParse(s.GetString(), out var sv)) parsedScore = sv;
 				}
-				if (root.TryGetProperty("analysis", out var a) && a.ValueKind == JsonValueKind.String)
+				if (element.TryGetProperty("analysis", out var a) && a.ValueKind == JsonValueKind.String)
 				{
-					analysis = a.GetString() ?? string.Empty;
-				}
-				// Some providers nest data
-				if (score == 0 && root.TryGetProperty("data", out var data) && data.ValueKind == JsonValueKind.Object)
-				{
-					if (data.TryGetProperty("score", out var ds) && ds.ValueKind == JsonValueKind.Number) score = ds.GetDouble();
-					if (data.TryGetProperty("analysis", out var da) && da.ValueKind == JsonValueKind.String) analysis = da.GetString() ?? analysis;
+					parsedAnalysis = a.GetString();
 				}
 			}
 
-			return new ScoreResponse(score, analysis);
+			string? TryParseJsonString(string? maybeJson)
+			{
+				if (string.IsNullOrWhiteSpace(maybeJson)) return null;
+				try
+				{
+					using var inner = JsonDocument.Parse(maybeJson);
+					TryExtractFrom(inner.RootElement);
+					return maybeJson;
+				}
+				catch
+				{
+					return null;
+				}
+			}
+
+			using (var doc = JsonDocument.Parse(json))
+			{
+				var root = doc.RootElement;
+				TryExtractFrom(root);
+
+				if ((parsedScore == null || parsedAnalysis == null) && root.TryGetProperty("data", out var data) && data.ValueKind == JsonValueKind.Object)
+				{
+					TryExtractFrom(data);
+					if ((parsedScore == null || parsedAnalysis == null) && data.TryGetProperty("content", out var dc) && dc.ValueKind == JsonValueKind.String)
+					{
+						TryParseJsonString(dc.GetString());
+					}
+				}
+
+				if ((parsedScore == null || parsedAnalysis == null) && root.TryGetProperty("content", out var c1) && c1.ValueKind == JsonValueKind.String)
+				{
+					TryParseJsonString(c1.GetString());
+				}
+
+				if ((parsedScore == null || parsedAnalysis == null) && root.TryGetProperty("choices", out var choices) && choices.ValueKind == JsonValueKind.Array && choices.GetArrayLength() > 0)
+				{
+					var first = choices[0];
+					if (first.ValueKind == JsonValueKind.Object && first.TryGetProperty("message", out var msg) && msg.ValueKind == JsonValueKind.Object && msg.TryGetProperty("content", out var c3) && c3.ValueKind == JsonValueKind.String)
+					{
+						TryParseJsonString(c3.GetString());
+					}
+				}
+			}
+
+			var finalScore = parsedScore ?? 0.0;
+			var finalAnalysis = parsedAnalysis ?? string.Empty;
+
+			return new ScoreResponse(finalScore, finalAnalysis);
 		}
 
 		public async Task<QuestionResponse> GenerateQuestionAsync(QuestionRequest request, CancellationToken ct)
