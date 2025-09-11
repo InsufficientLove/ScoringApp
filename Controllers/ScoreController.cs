@@ -37,7 +37,7 @@ namespace ScoringApp.Controllers
 
 			Response.Headers.Append("Cache-Control", "no-cache");
 			Response.Headers.Append("X-Accel-Buffering", "no");
-			Response.ContentType = "text/event-stream";
+			Response.ContentType = "text/event-stream; charset=utf-8";
 
 			var channel = _notifier.Subscribe(chatId);
 			HttpContext.Response.OnCompleted(() =>

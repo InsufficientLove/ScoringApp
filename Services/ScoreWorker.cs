@@ -14,6 +14,10 @@ namespace ScoringApp.Services
 		private readonly ILogger<ScoreWorker> _logger;
 		private readonly FastGptClient _fastGptClient;
 		private readonly ScoreNotifier _notifier;
+		private static readonly JsonSerializerOptions JsonOptions = new JsonSerializerOptions
+		{
+			Encoder = System.Text.Encodings.Web.JavaScriptEncoder.UnsafeRelaxedJsonEscaping
+		};
 
 		public ScoreWorker(ILogger<ScoreWorker> logger, FastGptClient fastGptClient, ScoreNotifier notifier)
 		{
@@ -59,7 +63,7 @@ namespace ScoringApp.Services
 							score = response.Score,
 							analysis = response.Analysis,
 							updatedAt = DateTime.UtcNow
-						});
+						}, JsonOptions);
 						await _notifier.PublishAsync(rec.ChatId, payload);
 					}
 					catch (Exception ex)
@@ -72,7 +76,7 @@ namespace ScoringApp.Services
 							id = rec.Id,
 							error = ex.Message,
 							updatedAt = DateTime.UtcNow
-						});
+						}, JsonOptions);
 						await _notifier.PublishAsync(rec.ChatId, payload);
 					}
 				}
