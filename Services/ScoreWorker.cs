@@ -54,7 +54,7 @@ namespace ScoringApp.Services
 							chatId = rec.ChatId,
 							content = rec.Content,
 							type = rec.Type,
-							correctAnsewers = rec.CorrectAnswers,
+							correctAnswers = rec.CorrectAnswers,
 							userAnswer = rec.UserAnswer,
 							score = response.Score,
 							analysis = response.Analysis,

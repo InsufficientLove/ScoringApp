@@ -49,15 +49,18 @@ namespace ScoringApp.Services
 		public async Task<ScoreResponse> ScoreAsync(ScoreRequest request, CancellationToken ct)
 		{
 			var sw = Stopwatch.StartNew();
-			var baseUrl = _options.ScoringApp.BaseUrl;
+			var cloudBase = _cloud?.ScoringApp?.BaseUrl;
+			var cloudKey = _cloud?.ScoringApp?.ApiKey;
+			var baseUrl = string.IsNullOrWhiteSpace(cloudBase) ? _options.ScoringApp.BaseUrl : cloudBase;
+			var apiKey = string.IsNullOrWhiteSpace(cloudKey) ? _options.ScoringApp.ApiKey : cloudKey;
+			var source = string.IsNullOrWhiteSpace(cloudBase) ? "local" : "cloud";
 			if (string.IsNullOrWhiteSpace(baseUrl))
 			{
-				_logger.LogError("FastGPT scoring BaseUrl not configured. Set FastGpt:ScoringApp:BaseUrl.");
+				_logger.LogError("FastGPT scoring BaseUrl not configured. Set FastGptCloud:ScoringApp:BaseUrl or FastGpt:ScoringApp:BaseUrl.");
 				throw new InvalidOperationException("FastGPT scoring BaseUrl not configured");
 			}
 			var uri = CombineUrl(baseUrl, "v1/chat/completions");
-			_logger.LogInformation("FastGPT scoring request(v2): requestUri={Uri}, chatId={ChatId}", uri, request.ChatId);
-			var apiKey = _options.ScoringApp.ApiKey;
+			_logger.LogInformation("FastGPT scoring request(v2,{Source}): requestUri={Uri}, chatId={ChatId}", source, uri, request.ChatId);
 			using var http = new HttpRequestMessage(HttpMethod.Post, uri);
 			http.Headers.Authorization = new AuthenticationHeaderValue("Bearer", apiKey);
 			http.Headers.Accept.Clear();
@@ -84,11 +87,11 @@ namespace ScoringApp.Services
 			var json = await resp.Content.ReadAsStringAsync(ct);
 			if (!resp.IsSuccessStatusCode)
 			{
-				_logger.LogWarning("FastGPT scoring response error: status={Status}, body={Body}", (int)resp.StatusCode, json);
+				_logger.LogWarning("FastGPT scoring response error({Source}): status={Status}, body={Body}", source, (int)resp.StatusCode, json);
 				resp.EnsureSuccessStatusCode();
 			}
 			sw.Stop();
-			_logger.LogInformation("FastGPT scoring response(v2): elapsedMs={Elapsed}, bytes={Bytes}", sw.ElapsedMilliseconds, json?.Length ?? 0);
+			_logger.LogInformation("FastGPT scoring response(v2,{Source}): elapsedMs={Elapsed}, bytes={Bytes}", source, sw.ElapsedMilliseconds, json?.Length ?? 0);
 
 			// Response may be a simple JSON with fields {analysis, score}
 			using var doc = JsonDocument.Parse(json);

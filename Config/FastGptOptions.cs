@@ -24,5 +24,6 @@ namespace ScoringApp.Config
 		}
 
 		public AppOptions QuestionApp { get; set; } = new AppOptions();
+		public AppOptions ScoringApp { get; set; } = new AppOptions();
 	}
 } 
